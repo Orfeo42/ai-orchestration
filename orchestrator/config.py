@@ -2,6 +2,16 @@ import json
 import os
 from pathlib import Path
 
+from pydantic import BaseModel, TypeAdapter
+
+
+class ProjectConfig(BaseModel):
+    path: str
+    base_branch: str = "main"
+
+
+_projects_adapter = TypeAdapter(dict[str, ProjectConfig])
+
 
 class Config:
     forgejo_url: str
@@ -9,7 +19,7 @@ class Config:
     forgejo_repos: list[str]
     anthropic_api_key: str
     redis_url: str
-    projects: dict
+    projects: dict[str, ProjectConfig]
     poll_interval: int
     git_user_name: str
     git_user_email: str
@@ -26,4 +36,4 @@ class Config:
 
         config_path = Path(os.environ.get("PROJECTS_CONFIG", "/config/projects.json"))
         with config_path.open() as f:
-            self.projects = json.load(f)
+            self.projects = _projects_adapter.validate_python(json.load(f))

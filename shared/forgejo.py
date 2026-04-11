@@ -1,6 +1,6 @@
 import httpx
 
-from shared.models import ForgejoIssue
+from shared.models import ForgejoPR, ForgejoIssue
 
 
 class ForgejoClient:
@@ -61,13 +61,13 @@ class ForgejoClient:
         body: str,
         head: str,
         base: str = "main",
-    ) -> dict:
+    ) -> ForgejoPR:
         resp = self._client.post(
             f"/api/v1/repos/{owner}/{repo}/pulls",
             json={"title": title, "body": body, "head": head, "base": base},
         )
         resp.raise_for_status()
-        return resp.json()
+        return ForgejoPR.model_validate(resp.json())
 
     def get_pr_diff(self, owner: str, repo: str, pr_number: int) -> str:
         resp = self._client.get(f"/api/v1/repos/{owner}/{repo}/pulls/{pr_number}.diff")

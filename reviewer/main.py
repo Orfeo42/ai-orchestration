@@ -38,11 +38,9 @@ def main() -> None:
 
     try:
         while True:
-            raw = queue.pop("queue:review", timeout=10)
-            if raw is None:
+            job = queue.pop_as("queue:review", ReviewJob, timeout=10)
+            if job is None:
                 continue
-
-            job = ReviewJob.model_validate(raw)
             log.info("reviewing PR #%d for %s/%s", job.pr_number, job.repo_owner, job.repo_name)
             try:
                 graph.invoke(initial_state(job))

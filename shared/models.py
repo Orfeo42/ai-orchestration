@@ -11,6 +11,12 @@ class ForgejoIssue(BaseModel):
     labels: list[str]
 
 
+class ForgejoPR(BaseModel):
+    number: int
+    title: str
+    body: str = ""
+
+
 class ReviewJob(BaseModel):
     repo_owner: str
     repo_name: str

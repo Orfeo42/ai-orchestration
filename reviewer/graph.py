@@ -2,6 +2,7 @@ import logging
 from typing import TypedDict
 
 from langgraph.graph import END, StateGraph
+from langgraph.graph.state import CompiledStateGraph
 
 from claude_reviewer import ClaudeReviewer
 from docs_writer import DocsWriter
@@ -14,8 +15,16 @@ log = logging.getLogger(__name__)
 
 
 class ReviewerState(TypedDict):
-    job: dict
-    result: dict | None
+    job: ReviewJob
+    result: ReviewResult | None
+    docs_updated: bool
+
+
+class _ReviewUpdate(TypedDict, total=False):
+    result: ReviewResult
+
+
+class _DocsUpdate(TypedDict, total=False):
     docs_updated: bool
 
 
@@ -25,16 +34,17 @@ def build_graph(
     forgejo: ForgejoClient,
     forgejo_url: str,
     forgejo_token: str,
-) -> object:
-    def review(state: ReviewerState) -> dict:
-        job = ReviewJob.model_validate(state["job"])
-        result = reviewer.review(job)
-        log.info("reviewed PR #%d (approved=%s)", job.pr_number, result.approved)
-        return {"result": result.model_dump()}
+) -> CompiledStateGraph:
+    def review(state: ReviewerState) -> _ReviewUpdate:
+        result = reviewer.review(state["job"])
+        log.info("reviewed PR #%d (approved=%s)", state["job"].pr_number, result.approved)
+        return {"result": result}
 
-    def update_docs(state: ReviewerState) -> dict:
-        job = ReviewJob.model_validate(state["job"])
-        result = ReviewResult.model_validate(state["result"])
+    def update_docs(state: ReviewerState) -> _DocsUpdate:
+        job = state["job"]
+        result = state["result"]
+        if result is None:
+            raise RuntimeError("result missing in update_docs")
 
         git = GitOps(job.project_path, forgejo_url, forgejo_token, job.repo_owner, job.repo_name)
         git.fetch()
@@ -49,9 +59,11 @@ def build_graph(
 
         return {"docs_updated": updated}
 
-    def post_review(state: ReviewerState) -> dict:
-        job = ReviewJob.model_validate(state["job"])
-        result = ReviewResult.model_validate(state["result"])
+    def post_review(state: ReviewerState) -> _DocsUpdate:
+        job = state["job"]
+        result = state["result"]
+        if result is None:
+            raise RuntimeError("result missing in post_review")
 
         lines = [f"## AI Review\n\n{result.summary}"]
         if result.issues:
@@ -70,7 +82,7 @@ def build_graph(
         )
         return {}
 
-    g = StateGraph(ReviewerState)
+    g: StateGraph = StateGraph(ReviewerState)
     g.add_node("review", review)
     g.add_node("update_docs", update_docs)
     g.add_node("post_review", post_review)
@@ -85,7 +97,7 @@ def build_graph(
 
 def initial_state(job: ReviewJob) -> ReviewerState:
     return ReviewerState(
-        job=job.model_dump(),
+        job=job,
         result=None,
         docs_updated=False,
     )

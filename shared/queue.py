@@ -1,7 +1,9 @@
-import json
+from typing import TypeVar
 
 import redis
 from pydantic import BaseModel
+
+_T = TypeVar("_T", bound=BaseModel)
 
 
 class RedisQueue:
@@ -11,12 +13,12 @@ class RedisQueue:
     def push(self, queue_name: str, job: BaseModel) -> None:
         self._r.lpush(queue_name, job.model_dump_json())
 
-    def pop(self, queue_name: str, timeout: int = 0) -> dict | None:
+    def pop_as(self, queue_name: str, model: type[_T], timeout: int = 0) -> _T | None:
         result = self._r.brpop(queue_name, timeout=timeout)
         if result is None:
             return None
         _, data = result
-        return json.loads(data)
+        return model.model_validate_json(data)
 
     def is_processed(self, key: str) -> bool:
         return bool(self._r.sismember("processed", key))
