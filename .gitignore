@@ -1,0 +1,17 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+
+# uv
+.python-version
+
+# env
+.env*
+
+# VS Code
+.vscode/
+
+# projects config (contains local paths)
+projects.json

@@ -1,0 +1,44 @@
+services:
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  orchestrator:
+    build:
+      context: .
+      dockerfile: orchestrator/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      redis:
+        condition: service_healthy
+    env_file: .env
+    volumes:
+      - ${PROJECTS_CONFIG_PATH:-./projects.json}:/config/projects.json:ro
+      # Mount project repos — add one line per project:
+      # - /home/orfeo42/sviluppo/ionstream/billing-backend:/projects/billing-backend
+      # - /home/orfeo42/sviluppo/ionstream/orchestration-backend:/projects/orchestration-backend
+
+  reviewer:
+    build:
+      context: .
+      dockerfile: reviewer/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      redis:
+        condition: service_healthy
+    env_file: .env
+    volumes:
+      # Same project mounts as orchestrator
+      # - /home/orfeo42/sviluppo/ionstream/billing-backend:/projects/billing-backend
+      # - /home/orfeo42/sviluppo/ionstream/orchestration-backend:/projects/orchestration-backend
+      - /dev/null:/dev/null  # placeholder so volumes key is valid
+
+volumes:
+  redis_data:
