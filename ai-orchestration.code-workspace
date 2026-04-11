@@ -6,13 +6,11 @@
         },
         {
             "name": "orchestrator",
-            "path": "orchestrator",
-            "python.defaultInterpreterPath": "${workspaceFolder}/.venv/bin/python"
+            "path": "orchestrator"
         },
         {
             "name": "reviewer",
-            "path": "reviewer",
-            "python.defaultInterpreterPath": "${workspaceFolder}/.venv/bin/python"
+            "path": "reviewer"
         },
         {
             "name": "shared",
@@ -20,9 +18,6 @@
         }
     ],
     "settings": {
-        "python.analysis.extraPaths": [
-            "${workspaceFolder}"
-        ],
         "[python]": {
             "editor.formatOnSave": true,
             "editor.defaultFormatter": "charliermarsh.ruff"
