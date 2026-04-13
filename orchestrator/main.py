@@ -81,7 +81,7 @@ def poll_repo(
     config: Config,
 ) -> None:
     try:
-        issues = forgejo.get_issues(owner, repo, assignee=config.forgejo_assignee)
+        issues = forgejo.get_issues(owner=owner,repo=repo, assignee=config.forgejo_assignee)
     except Exception as exc:
         log.error("fetch issues failed for %s/%s: %s", owner, repo, exc)
         return
