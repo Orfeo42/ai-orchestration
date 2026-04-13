@@ -1,5 +1,6 @@
 import httpx
 
+from shared.constants import LABEL_IMPLEMENT
 from shared.models import ForgejoPR, ForgejoIssue
 
 
@@ -15,7 +16,7 @@ class ForgejoClient:
         self,
         owner: str,
         repo: str,
-        label: str = "ai-implement",
+        label: str = LABEL_IMPLEMENT,
         assignee: str | None = None,
     ) -> list[ForgejoIssue]:
         params: dict[str, str | int] = {

@@ -93,6 +93,13 @@ AI-powered development pipeline. Reads Forgejo issues, implements code autonomou
 - [ ] Orchestrator: handle git conflicts when branch already exists (e.g. retry after failure)
 - [ ] Reviewer: skip README update if PR is documentation-only (avoid no-op commits)
 - [ ] Add `FORGEJO_BASE_BRANCH` override per-issue via issue label (e.g. `base:develop`)
+- [ ] Orchestrator Improvement (Code Review):
+  - [ ] Fix label inconsistency (use `LABEL_DONE` constant in `graph.py`).
+  - [ ] Add `fail` node to LangGraph to handle `MAX_IMPL_ATTEMPTS` (comment failure on issue, remove `ai-in-progress` label).
+  - [ ] Reset git state (`git reset --hard HEAD`) on retry to avoid state contamination.
+  - [ ] Make branch names unique (e.g., `ai/{repo_name}-{issue_number}`) to avoid collisions.
+  - [ ] Improve test detection in `test_runner.py` (robust `pyproject.toml` parsing, standard Go/NPM patterns).
+  - [ ] Add graceful shutdown (`SIGTERM` handling) to `main.py`.
 
 ### Observability
 

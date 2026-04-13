@@ -6,11 +6,13 @@ from langgraph.graph.state import CompiledStateGraph
 
 from claude_agent import ClaudeAgent
 from config import Config
+from shared.constants import LABEL_DONE
 from shared.forgejo import ForgejoClient
 from shared.git_ops import GitOps
 from shared.models import ForgejoIssue, ReviewJob
 from shared.queue import RedisQueue
 from test_runner import run_tests
+
 
 log = logging.getLogger(__name__)
 
@@ -115,7 +117,7 @@ def build_graph(
         if pr_number is None or diff is None:
             raise RuntimeError("pr_number or diff missing in queue_review")
 
-        done_id = forgejo.get_label_id(issue.repo_owner, issue.repo_name, "ai-done")
+        done_id = forgejo.get_label_id(issue.repo_owner, issue.repo_name, LABEL_DONE)
         if done_id is not None:
             forgejo.add_label(issue.repo_owner, issue.repo_name, issue.number, done_id)
 

@@ -7,17 +7,17 @@ from config import Config, ProjectConfig
 from graph import build_graph, initial_state
 from langgraph.graph.state import CompiledStateGraph
 from repo_manager import sync_all
+from shared.constants import (
+    LABEL_DONE,
+    LABEL_IN_PROGRESS,
+    LABEL_PROJECT_PREFIX,
+)
 from shared.forgejo import ForgejoClient
 from shared.models import ForgejoIssue
 from shared.queue import RedisQueue
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 log = logging.getLogger(__name__)
-
-LABEL_IMPLEMENT = "ai-implement"
-LABEL_IN_PROGRESS = "ai-in-progress"
-LABEL_DONE = "ai-done"
-LABEL_PROJECT_PREFIX = "project:"
 
 
 def configure_git(name: str, email: str) -> None:
