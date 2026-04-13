@@ -12,6 +12,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
+RUN GO_VERSION=$(curl -fsSL https://go.dev/VERSION?m=text | head -1) \
+    && curl -fsSL "https://go.dev/dl/${GO_VERSION}.linux-amd64.tar.gz" | tar -C /usr/local -xzf -
+
+ENV PATH="/usr/local/go/bin:${PATH}"
+
 RUN useradd -m -s /bin/bash app
 
 COPY orchestrator/claude/settings.json /home/app/.claude/settings.json

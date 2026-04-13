@@ -8,8 +8,8 @@ log = structlog.get_logger(__name__)
 
 
 class ClaudeAgent:
-    def __init__(self) -> None:
-        pass
+    def __init__(self, timeout: int = 3600) -> None:
+        self._timeout = timeout
 
     def implement_issue(
         self,
@@ -17,35 +17,38 @@ class ClaudeAgent:
         project_path: str,
         test_error: str | None = None,
         resume: bool = False,
-    ) -> None:
+    ) -> str:
         prompt = self._build_prompt(issue, test_error)
+        log.info("running claude agent", issue=issue.number, project_path=project_path, resume=resume)
 
+        extra = ["--continue"] if resume else []
+        result = self._run(extra, prompt, project_path)
+
+        output = f"--- STDOUT ---\n{result.stdout}\n--- STDERR ---\n{result.stderr}"
+        if result.returncode != 0:
+            log.error("claude agent failed", code=result.returncode, stderr=result.stderr[:1000], stdout=result.stdout[:500])
+            raise RuntimeError(f"claude exited {result.returncode}\n\n{output}")
+
+        log.info("claude agent finished successfully", issue=issue.number)
+        return output
+
+    def _run(self, extra_flags: list[str], prompt: str, cwd: str) -> subprocess.CompletedProcess[str]:
         cmd = [
             "claude",
             "--print",
             "--dangerously-skip-permissions",
             "--output-format", "text",
             "--allowedTools", "Bash,Read,Edit,Write,Glob,Grep",
+            *extra_flags,
         ]
-        if resume:
-            cmd.append("--continue")
-
-        log.info("running claude agent", issue=issue.number, project_path=project_path, resume=resume)
-
-        result = subprocess.run(
+        return subprocess.run(
             cmd,
             input=prompt,
-            cwd=project_path,
+            cwd=cwd,
             capture_output=True,
             text=True,
-            timeout=600,
+            timeout=self._timeout,
         )
-
-        if result.returncode != 0:
-            log.error("claude agent failed", code=result.returncode, stderr=result.stderr[:1000], stdout=result.stdout[:500])
-            raise RuntimeError(f"claude exited {result.returncode}")
-        
-        log.info("claude agent finished successfully", issue=issue.number)
 
     def _build_prompt(self, issue: ForgejoIssue, test_error: str | None) -> str:
         base = f"""Implement the following issue for this project.

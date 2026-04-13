@@ -12,6 +12,7 @@
 - Short functions. One responsibility.
 - Early returns. Flat control flow.
 - Check/propagate all errors.
+- Add logs for new code.
 - No suppressed warnings.
 - No comments. Remove useless comments in touched files.
 

@@ -2,6 +2,7 @@ import re
 from typing import TypedDict
 
 import structlog
+from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.graph import END, StateGraph
 from langgraph.graph.state import CompiledStateGraph
 
@@ -31,12 +32,14 @@ class OrchestratorState(TypedDict):
     diff: str | None
     impl_attempts: int
     test_error: str | None
+    console_output: str | None
     failed: bool
 
 
 class _ImplUpdate(TypedDict, total=False):
     impl_attempts: int
     test_error: str | None
+    console_output: str | None
 
 
 class _TestUpdate(TypedDict, total=False):
@@ -54,6 +57,7 @@ def build_graph(
     forgejo: ForgejoClient,
     queue: RedisQueue,
     config: Config,
+    checkpointer: BaseCheckpointSaver | None = None,
 ) -> CompiledStateGraph:
     def implement(state: OrchestratorState) -> _ImplUpdate:
         resume = False
@@ -67,8 +71,8 @@ def build_graph(
         else:
             log.info("retry impl attempt %d for issue #%d", state["impl_attempts"] + 1, state["issue"].number)
 
-        agent.implement_issue(state["issue"], state["project_path"], state["test_error"], resume=resume)
-        return {"impl_attempts": state["impl_attempts"] + 1, "test_error": None}
+        output = agent.implement_issue(state["issue"], state["project_path"], state["test_error"], resume=resume)
+        return {"impl_attempts": state["impl_attempts"] + 1, "test_error": None, "console_output": output}
 
     def run_tests_node(state: OrchestratorState) -> _TestUpdate:
         if not _code_git(state, config).has_changes():
@@ -167,7 +171,7 @@ def build_graph(
     g.add_edge("create_pr", "queue_review")
     g.add_edge("queue_review", END)
 
-    return g.compile()
+    return g.compile(checkpointer=checkpointer)
 
 
 def initial_state(
@@ -188,6 +192,7 @@ def initial_state(
         diff=None,
         impl_attempts=0,
         test_error=None,
+        console_output=None,
         failed=False,
     )
 

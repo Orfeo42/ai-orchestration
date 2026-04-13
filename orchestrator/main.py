@@ -121,7 +121,7 @@ def main() -> None:
 
     forgejo = ForgejoClient(config.forgejo_url, config.forgejo_token)
     queue = RedisQueue(config.redis_url)
-    graph = build_graph(ClaudeAgent(), forgejo, queue, config)
+    graph = build_graph(ClaudeAgent(timeout=config.claude_timeout), forgejo, queue, config)
 
     sync_all(config.projects, config.forgejo_url, config.forgejo_token)
 

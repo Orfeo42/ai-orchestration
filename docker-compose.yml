@@ -25,6 +25,7 @@ services:
       FORGEJO_ASSIGNEE: ${FORGEJO_ASSIGNEE:-}
       REDIS_URL: ${REDIS_URL:-redis://redis:6379}
       POLL_INTERVAL: ${POLL_INTERVAL:-60}
+      CLAUDE_TIMEOUT: ${CLAUDE_TIMEOUT:-3600}
       GIT_USER_NAME: ${GIT_USER_NAME:-AI Orchestrator}
       GIT_USER_EMAIL: ${GIT_USER_EMAIL:-ai@orchestrator.local}
       PROJECTS_CONFIG: /config/projects.json

@@ -28,6 +28,7 @@ class Config:
     redis_url: str
     projects: dict[str, ProjectConfig]
     poll_interval: int
+    claude_timeout: int
     git_user_name: str
     git_user_email: str
 
@@ -38,6 +39,7 @@ class Config:
         self.forgejo_assignee = os.environ.get("FORGEJO_ASSIGNEE")
         self.redis_url = os.environ.get("REDIS_URL", "redis://redis:6379")
         self.poll_interval = int(os.environ.get("POLL_INTERVAL", "60"))
+        self.claude_timeout = int(os.environ.get("CLAUDE_TIMEOUT", "3600"))
         self.git_user_name = os.environ.get("GIT_USER_NAME", "AI Orchestrator")
         self.git_user_email = os.environ.get("GIT_USER_EMAIL", "ai@orchestrator.local")
 
