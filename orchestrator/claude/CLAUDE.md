@@ -64,3 +64,7 @@ func TestParseID(t *testing.T) {
 ## Interaction rules
 
 - Read official docs before answering questions about libraries, tools, APIs
+
+## Communication
+
+/caveman ultra
