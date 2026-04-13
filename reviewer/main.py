@@ -1,17 +1,17 @@
-import logging
 import subprocess
 
+import structlog
 from claude_reviewer import ClaudeReviewer
 from config import Config
 from docs_writer import DocsWriter
 from gemini_reviewer import GeminiReviewer
 from graph import build_graph, initial_state
 from shared.forgejo import ForgejoClient
+from shared.logging_config import setup_logging
 from shared.models import ReviewJob
 from shared.queue import RedisQueue
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
-log = logging.getLogger(__name__)
+log = structlog.get_logger(__name__)
 
 
 def configure_git(name: str, email: str) -> None:
@@ -20,6 +20,7 @@ def configure_git(name: str, email: str) -> None:
 
 
 def main() -> None:
+    setup_logging()
     config = Config()
     configure_git(config.git_user_name, config.git_user_email)
 
@@ -34,18 +35,18 @@ def main() -> None:
 
     graph = build_graph(reviewer, docs_writer, forgejo, config.forgejo_url, config.forgejo_token)
 
-    log.info("reviewer started (primary=%s)", config.primary_reviewer)
+    log.info("reviewer started", primary=config.primary_reviewer)
 
     try:
         while True:
             job = queue.pop_as("queue:review", ReviewJob, timeout=10)
             if job is None:
                 continue
-            log.info("reviewing PR #%d for %s/%s", job.pr_number, job.repo_owner, job.repo_name)
+            log.info("reviewing PR", pr_number=job.pr_number, repo=f"{job.repo_owner}/{job.repo_name}")
             try:
                 graph.invoke(initial_state(job))
             except Exception as exc:
-                log.error("review failed for PR #%d: %s", job.pr_number, exc)
+                log.error("review failed", pr_number=job.pr_number, error=str(exc))
     finally:
         forgejo.close()
 

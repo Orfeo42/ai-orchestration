@@ -1,6 +1,7 @@
-import logging
+import re
 from typing import TypedDict
 
+import structlog
 from langgraph.graph import END, StateGraph
 from langgraph.graph.state import CompiledStateGraph
 
@@ -14,7 +15,7 @@ from shared.queue import RedisQueue
 from test_runner import run_tests
 
 
-log = logging.getLogger(__name__)
+log = structlog.get_logger(__name__)
 
 MAX_IMPL_ATTEMPTS = 3
 
@@ -99,9 +100,9 @@ def build_graph(
             state["code_repo_name"],
             title=f"feat: {issue.title}",
             body=(
+                f"relates to: {issue.repo_owner}/{issue.repo_name}#{issue.number}\n\n"
                 f"Implements [{issue.repo_owner}/{issue.repo_name}#{issue.number}]"
                 f"({config.forgejo_url}/{issue.repo_owner}/{issue.repo_name}/issues/{issue.number})"
-                f"\n\nImplemented by AI orchestrator."
             ),
             head=state["branch"],
             base=state["base_branch"],
@@ -178,13 +179,19 @@ def initial_state(
         code_repo_name=code_repo_name,
         project_path=project_path,
         base_branch=base_branch,
-        branch=f"ai/issue-{issue.number}",
+        branch=f"feature/{issue.number}-{_branch_slug(issue.title)}",
         pr_number=None,
         diff=None,
         impl_attempts=0,
         test_error=None,
         failed=False,
     )
+
+
+def _branch_slug(title: str) -> str:
+    slug = title.lower()
+    slug = re.sub(r"[^a-z0-9]+", "-", slug)
+    return slug.strip("-")[:50]
 
 
 def _code_git(state: OrchestratorState, config: Config) -> GitOps:

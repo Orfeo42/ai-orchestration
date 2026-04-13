@@ -1,7 +1,10 @@
 import httpx
+import structlog
 
 from shared.constants import LABEL_IMPLEMENT
 from shared.models import ForgejoPR, ForgejoIssue
+
+log = structlog.get_logger(__name__)
 
 
 class ForgejoClient:
@@ -27,6 +30,8 @@ class ForgejoClient:
         }
         if assignee is not None:
             params["assignee"] = assignee
+        
+        log.debug("fetching issues", repo=f"{owner}/{repo}", label=label)
         resp = self._client.get(
             f"/api/v1/repos/{owner}/{repo}/issues",
             params=params,
@@ -62,6 +67,8 @@ class ForgejoClient:
         resp.raise_for_status()
 
     def create_comment(self, owner: str, repo: str, issue_number: int, body: str) -> None:
+        if True:
+            return
         resp = self._client.post(
             f"/api/v1/repos/{owner}/{repo}/issues/{issue_number}/comments",
             json={"body": body},

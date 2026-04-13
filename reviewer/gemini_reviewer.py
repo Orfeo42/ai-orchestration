@@ -1,6 +1,9 @@
 import google.generativeai as genai
+import structlog
 
 from shared.models import ReviewJob, ReviewResult, parse_review_text
+
+log = structlog.get_logger(__name__)
 
 REVIEW_PROMPT_TEMPLATE = """Review this pull request diff. Be concise and direct.
 
@@ -27,10 +30,13 @@ class GeminiReviewer:
         self._model = genai.GenerativeModel("gemini-2.0-flash")
 
     def review(self, job: ReviewJob) -> ReviewResult:
+        log.info("requesting gemini review", pr_number=job.pr_number)
         prompt = REVIEW_PROMPT_TEMPLATE.format(
             pr_title=job.pr_title,
             issue_number=job.issue_number,
             diff=job.diff,
         )
         response = self._model.generate_content(prompt)
-        return parse_review_text(response.text)
+        text = response.text
+        log.debug("gemini review received", text=text)
+        return parse_review_text(text)

@@ -1,7 +1,7 @@
-import logging
 import subprocess
 import time
 
+import structlog
 from claude_agent import ClaudeAgent
 from config import Config, ProjectConfig
 from graph import build_graph, initial_state
@@ -13,11 +13,11 @@ from shared.constants import (
     LABEL_PROJECT_PREFIX,
 )
 from shared.forgejo import ForgejoClient
+from shared.logging_config import setup_logging
 from shared.models import ForgejoIssue
 from shared.queue import RedisQueue
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
-log = logging.getLogger(__name__)
+log = structlog.get_logger(__name__)
 
 
 def configure_git(name: str, email: str) -> None:
@@ -107,6 +107,7 @@ def poll_repo(
 
 
 def main() -> None:
+    setup_logging()
     config = Config()
     configure_git(config.git_user_name, config.git_user_email)
 

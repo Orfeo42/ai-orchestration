@@ -1,4 +1,4 @@
-import logging
+import structlog
 from typing import TypedDict
 
 from langgraph.graph import END, StateGraph
@@ -11,7 +11,7 @@ from shared.forgejo import ForgejoClient
 from shared.git_ops import GitOps
 from shared.models import ReviewJob, ReviewResult
 
-log = logging.getLogger(__name__)
+log = structlog.get_logger(__name__)
 
 
 class ReviewerState(TypedDict):
@@ -37,7 +37,7 @@ def build_graph(
 ) -> CompiledStateGraph:
     def review(state: ReviewerState) -> _ReviewUpdate:
         result = reviewer.review(state["job"])
-        log.info("reviewed PR #%d (approved=%s)", state["job"].pr_number, result.approved)
+        log.info("reviewed PR", pr_number=state["job"].pr_number, approved=result.approved)
         return {"result": result}
 
     def update_docs(state: ReviewerState) -> _DocsUpdate:
@@ -55,7 +55,7 @@ def build_graph(
             git.add("README.md")
             git.commit(f"docs: update README for PR #{job.pr_number}")
             git.push(job.pr_branch)
-            log.info("README updated for PR #%d", job.pr_number)
+            log.info("README updated", pr_number=job.pr_number)
 
         return {"docs_updated": updated}
 

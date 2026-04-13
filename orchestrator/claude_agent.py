@@ -1,7 +1,11 @@
 import os
 import subprocess
 
+import structlog
+
 from shared.models import ForgejoIssue
+
+log = structlog.get_logger(__name__)
 
 
 class ClaudeAgent:
@@ -20,6 +24,8 @@ class ClaudeAgent:
             "ANTHROPIC_API_KEY": self._api_key,
         }
 
+        log.info("running claude agent", issue=issue.number, project_path=project_path)
+        
         result = subprocess.run(
             [
                 "claude",
@@ -36,7 +42,10 @@ class ClaudeAgent:
         )
 
         if result.returncode != 0:
-            raise RuntimeError(f"claude exited {result.returncode}: {result.stderr[:500]}")
+            log.error("claude agent failed", code=result.returncode, stderr=result.stderr[:1000])
+            raise RuntimeError(f"claude exited {result.returncode}")
+        
+        log.info("claude agent finished successfully", issue=issue.number)
 
     def _build_prompt(self, issue: ForgejoIssue, test_error: str | None) -> str:
         base = f"""Implement the following issue for this project.

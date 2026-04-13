@@ -1,10 +1,11 @@
-import logging
 import subprocess
 from pathlib import Path
 
+import structlog
+
 from config import ProjectConfig
 
-log = logging.getLogger(__name__)
+log = structlog.get_logger(__name__)
 
 
 def _remote_url(forgejo_url: str, token: str, repo: str) -> str:
@@ -17,11 +18,11 @@ def clone_or_pull(project: ProjectConfig, forgejo_url: str, token: str, base_bra
     remote = _remote_url(forgejo_url, token, project.repo)
 
     if path.exists():
-        log.info("pulling %s", project.repo)
+        log.info("pulling repo", repo=project.repo)
         subprocess.run(["git", "checkout", base_branch], cwd=path, check=True)
         subprocess.run(["git", "pull", remote, base_branch], cwd=path, check=True)
     else:
-        log.info("cloning %s → %s", project.repo, path)
+        log.info("cloning repo", repo=project.repo, path=str(path))
         path.parent.mkdir(parents=True, exist_ok=True)
         subprocess.run(["git", "clone", remote, str(path)], check=True)
 
@@ -35,4 +36,4 @@ def sync_all(
         try:
             clone_or_pull(project, forgejo_url, token, project.base_branch)
         except subprocess.CalledProcessError as exc:
-            log.error("failed to sync repo '%s': %s", name, exc)
+            log.error("sync failed", project=name, error=str(exc))
