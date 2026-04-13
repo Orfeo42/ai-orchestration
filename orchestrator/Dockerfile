@@ -13,6 +13,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 COPY orchestrator/claude/settings.json /root/.claude/settings.json
+COPY orchestrator/claude/CLAUDE.md /root/.claude/CLAUDE.md
 
 RUN git clone --depth 1 https://github.com/JuliusBrussee/caveman.git \
     /root/.claude/plugins/cache/caveman/caveman/92f892f2b997
