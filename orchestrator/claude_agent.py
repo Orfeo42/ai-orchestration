@@ -1,3 +1,4 @@
+import json
 import subprocess
 import threading
 import time
@@ -21,19 +22,18 @@ class ClaudeAgent:
         test_error: str | None = None,
         resume: bool = False,
     ) -> str:
-        prompt = self._build_prompt(issue, test_error)
+        prompt = _build_prompt(issue, test_error)
         log.info("running claude agent", issue=issue.number, project_path=project_path, resume=resume)
 
         extra = ["--continue"] if resume else []
         stdout, stderr, returncode = self._run_streaming(extra, prompt, project_path)
 
-        output = f"--- STDOUT ---\n{stdout}\n--- STDERR ---\n{stderr}"
         if returncode != 0:
-            log.error("claude agent failed", code=returncode, stderr=stderr[:1000], stdout=stdout[:500])
-            raise RuntimeError(f"claude exited {returncode}\n\n{output}")
+            log.error("claude agent failed", code=returncode, stderr=stderr[:1000])
+            raise RuntimeError(f"claude exited {returncode}\nstderr: {stderr}")
 
         log.info("claude agent finished successfully", issue=issue.number)
-        return output
+        return stdout
 
     def _run_streaming(
         self,
@@ -45,7 +45,8 @@ class ClaudeAgent:
             "claude",
             "--print",
             "--dangerously-skip-permissions",
-            "--output-format", "text",
+            "--output-format", "stream-json",
+            "--verbose",
             "--allowedTools", "Bash,Read,Edit,Write,Glob,Grep",
             *extra_flags,
         ]
@@ -62,16 +63,18 @@ class ClaudeAgent:
         stdout_lines: list[str] = []
         stderr_lines: list[str] = []
 
-        def stream(pipe: IO[str], buf: list[str], level: str) -> None:
+        def stream_stdout(pipe: IO[str]) -> None:
             for line in pipe:
-                buf.append(line)
-                if level == "info":
-                    log.info("[claude] %s", line.rstrip())
-                else:
-                    log.warning("[claude stderr] %s", line.rstrip())
+                stdout_lines.append(line)
+                _log_event(line.strip())
 
-        t_out = threading.Thread(target=stream, args=(proc.stdout, stdout_lines, "info"), daemon=True)
-        t_err = threading.Thread(target=stream, args=(proc.stderr, stderr_lines, "warn"), daemon=True)
+        def stream_stderr(pipe: IO[str]) -> None:
+            for line in pipe:
+                stderr_lines.append(line)
+                log.warning("claude stderr", output=line.rstrip())
+
+        t_out = threading.Thread(target=stream_stdout, args=(proc.stdout,), daemon=True)
+        t_err = threading.Thread(target=stream_stderr, args=(proc.stderr,), daemon=True)
         t_out.start()
         t_err.start()
 
@@ -91,7 +94,36 @@ class ClaudeAgent:
 
         return "".join(stdout_lines), "".join(stderr_lines), proc.returncode
 
-    def _build_prompt(self, issue: ForgejoIssue, test_error: str | None) -> str:
+
+def _log_event(line: str) -> None:
+    if not line:
+        return
+    try:
+        event = json.loads(line)
+    except json.JSONDecodeError:
+        log.info("claude", output=line)
+        return
+
+    event_type = event.get("type", "")
+    if event_type == "assistant":
+        for block in event.get("message", {}).get("content", []):
+            if block.get("type") == "text":
+                text = block.get("text", "").strip()
+                if text:
+                    log.info("claude text", output=text[:500])
+            elif block.get("type") == "tool_use":
+                log.info("claude tool", tool=block.get("name"), input=str(block.get("input", ""))[:200])
+    elif event_type == "tool_result":
+        content = event.get("content", "")
+        if isinstance(content, list):
+            for c in content:
+                if c.get("type") == "text":
+                    log.info("claude tool result", output=c.get("text", "")[:200])
+        elif isinstance(content, str) and content:
+            log.info("claude tool result", output=content[:200])
+
+
+def _build_prompt(issue: ForgejoIssue, test_error: str | None) -> str:
         base = f"""Implement the following issue for this project.
 
 Issue #{issue.number}: {issue.title}
