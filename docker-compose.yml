@@ -43,10 +43,8 @@ services:
     environment:
       FORGEJO_URL: ${FORGEJO_URL}
       FORGEJO_TOKEN: ${FORGEJO_TOKEN}
-      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
       GEMINI_API_KEY: ${GEMINI_API_KEY}
       REDIS_URL: ${REDIS_URL:-redis://redis:6379}
-      PRIMARY_REVIEWER: ${PRIMARY_REVIEWER:-gemini}
       GIT_USER_NAME: ${GIT_USER_NAME:-AI Reviewer}
       GIT_USER_EMAIL: ${GIT_USER_EMAIL:-ai-reviewer@orchestrator.local}
     volumes:

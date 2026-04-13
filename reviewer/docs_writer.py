@@ -1,11 +1,9 @@
 from pathlib import Path
 
-import anthropic
+import google.generativeai as genai
 import structlog
 
 from shared.models import ReviewJob, ReviewResult
-
-from shared.constants import CLAUDE_MODEL
 
 log = structlog.get_logger(__name__)
 
@@ -28,7 +26,8 @@ If no meaningful update is needed, return the original content unchanged."""
 
 class DocsWriter:
     def __init__(self, api_key: str) -> None:
-        self._client = anthropic.Anthropic(api_key=api_key)
+        genai.configure(api_key=api_key)
+        self._model = genai.GenerativeModel("gemini-2.0-flash")
 
     def update_readme(self, job: ReviewJob, review: ReviewResult) -> bool:
         readme_path = Path(job.project_path) / "README.md"
@@ -42,14 +41,8 @@ class DocsWriter:
             diff=job.diff[:4000],
         )
 
-        msg = self._client.messages.create(
-            model=CLAUDE_MODEL,
-            max_tokens=4096,
-            messages=[{"role": "user", "content": prompt}],
-        )
-
-        text_block = next(b for b in msg.content if b.type == "text")
-        new_content = text_block.text
+        response = self._model.generate_content(prompt)
+        new_content = response.text
         if new_content.strip() == existing.strip():
             log.info("README remains unchanged")
             return False

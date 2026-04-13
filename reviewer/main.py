@@ -1,7 +1,6 @@
 import subprocess
 
 import structlog
-from claude_reviewer import ClaudeReviewer
 from config import Config
 from docs_writer import DocsWriter
 from gemini_reviewer import GeminiReviewer
@@ -26,12 +25,8 @@ def main() -> None:
 
     forgejo = ForgejoClient(config.forgejo_url, config.forgejo_token)
     queue = RedisQueue(config.redis_url)
-    docs_writer = DocsWriter(config.anthropic_api_key)
-
-    if config.primary_reviewer == "claude":
-        reviewer: ClaudeReviewer | GeminiReviewer = ClaudeReviewer(config.anthropic_api_key)
-    else:
-        reviewer = GeminiReviewer(config.gemini_api_key)
+    reviewer = GeminiReviewer(config.gemini_api_key)
+    docs_writer = DocsWriter(config.gemini_api_key)
 
     graph = build_graph(reviewer, docs_writer, forgejo, config.forgejo_url, config.forgejo_token)
 

@@ -4,7 +4,6 @@ from typing import TypedDict
 from langgraph.graph import END, StateGraph
 from langgraph.graph.state import CompiledStateGraph
 
-from claude_reviewer import ClaudeReviewer
 from docs_writer import DocsWriter
 from gemini_reviewer import GeminiReviewer
 from shared.forgejo import ForgejoClient
@@ -29,7 +28,7 @@ class _DocsUpdate(TypedDict, total=False):
 
 
 def build_graph(
-    reviewer: ClaudeReviewer | GeminiReviewer,
+    reviewer: GeminiReviewer,
     docs_writer: DocsWriter,
     forgejo: ForgejoClient,
     forgejo_url: str,
