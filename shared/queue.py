@@ -1,4 +1,4 @@
-from typing import TypeVar
+from typing import TypeVar, cast
 
 import redis
 import structlog
@@ -17,9 +17,10 @@ class RedisQueue:
         self._r.lpush(queue_name, job.model_dump_json())
 
     def pop_as(self, queue_name: str, model: type[_T], timeout: int = 0) -> _T | None:
-        result = self._r.brpop(queue_name, timeout=timeout)
-        if result is None:
+        raw = self._r.brpop(queue_name, timeout=timeout)
+        if raw is None:
             return None
+        result = cast(tuple[str, str], raw)
         _, data = result
         log.debug("popped from queue", queue=queue_name)
         return model.model_validate_json(data)
@@ -28,4 +29,18 @@ class RedisQueue:
         return bool(self._r.sismember("processed", key))
 
     def mark_processed(self, key: str) -> None:
+        log.info("marking issue processed", key=key)
         self._r.sadd("processed", key)
+
+    def mark_in_progress(self, key: str, ttl_seconds: int = 7200) -> None:
+        log.info("marking issue in-progress", key=key, ttl_seconds=ttl_seconds)
+        self._r.set(f"in_progress:{key}", "1", ex=ttl_seconds)
+
+    def is_in_progress(self, key: str) -> bool:
+        result = self._r.exists(f"in_progress:{key}") == 1
+        log.debug("checked in-progress", key=key, result=result)
+        return result
+
+    def clear_in_progress(self, key: str) -> None:
+        log.info("clearing in-progress lock", key=key)
+        self._r.delete(f"in_progress:{key}")

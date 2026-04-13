@@ -33,9 +33,10 @@ def get_project_name(labels: list[str]) -> str | None:
 
 
 def should_skip(issue: ForgejoIssue, queue: RedisQueue, owner: str, repo: str) -> bool:
-    if queue.is_processed(f"{owner}/{repo}#{issue.number}"):
+    key = f"{owner}/{repo}#{issue.number}"
+    if queue.is_processed(key):
         return True
-    if LABEL_IN_PROGRESS in issue.labels or LABEL_DONE in issue.labels:
+    if LABEL_DONE in issue.labels:
         return True
     return False
 
@@ -59,7 +60,9 @@ def process_issue(
     issue_owner: str,
     issue_repo: str,
 ) -> None:
+    key = f"{issue_owner}/{issue_repo}#{issue.number}"
     code_owner, code_repo = project.repo.split("/", 1)
+    queue.mark_in_progress(key)
     start_issue(forgejo, issue_owner, issue_repo, issue)
     log.info("processing issue #%d → %s", issue.number, project.repo)
     graph.invoke(initial_state(
@@ -69,7 +72,8 @@ def process_issue(
         project_path=project.path,
         base_branch=project.base_branch,
     ))
-    queue.mark_processed(f"{issue_owner}/{issue_repo}#{issue.number}")
+    queue.clear_in_progress(key)
+    queue.mark_processed(key)
 
 
 def poll_repo(
@@ -104,6 +108,7 @@ def poll_repo(
             process_issue(issue, project, forgejo, queue, graph, owner, repo)
         except Exception as exc:
             log.error("issue #%d failed: %s", issue.number, exc)
+            queue.clear_in_progress(f"{owner}/{repo}#{issue.number}")
             label_id = forgejo.get_label_id(owner, repo, LABEL_IN_PROGRESS)
             if label_id is not None:
                 forgejo.remove_label(owner, repo, issue.number, label_id)

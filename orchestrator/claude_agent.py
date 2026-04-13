@@ -16,19 +16,24 @@ class ClaudeAgent:
         issue: ForgejoIssue,
         project_path: str,
         test_error: str | None = None,
+        resume: bool = False,
     ) -> None:
         prompt = self._build_prompt(issue, test_error)
 
-        log.info("running claude agent", issue=issue.number, project_path=project_path)
+        cmd = [
+            "claude",
+            "--print",
+            "--dangerously-skip-permissions",
+            "--output-format", "text",
+            "--allowedTools", "Bash,Read,Edit,Write,Glob,Grep",
+        ]
+        if resume:
+            cmd.append("--continue")
+
+        log.info("running claude agent", issue=issue.number, project_path=project_path, resume=resume)
 
         result = subprocess.run(
-            [
-                "claude",
-                "--print",
-                "--dangerously-skip-permissions",
-                "--output-format", "text",
-                "--allowedTools", "Bash,Read,Edit,Write,Glob,Grep",
-            ],
+            cmd,
             input=prompt,
             cwd=project_path,
             capture_output=True,

@@ -7,7 +7,7 @@ from langgraph.graph.state import CompiledStateGraph
 
 from claude_agent import ClaudeAgent
 from config import Config
-from shared.constants import LABEL_DONE
+from shared.constants import LABEL_DONE, LABEL_IN_PROGRESS
 from shared.forgejo import ForgejoClient
 from shared.git_ops import GitOps
 from shared.models import ForgejoIssue, ReviewJob
@@ -56,14 +56,18 @@ def build_graph(
     config: Config,
 ) -> CompiledStateGraph:
     def implement(state: OrchestratorState) -> _ImplUpdate:
+        resume = False
         if state["impl_attempts"] == 0:
             git = _code_git(state, config)
             git.checkout(state["base_branch"])
             git.create_branch(state["branch"])
+            resume = LABEL_IN_PROGRESS in state["issue"].labels
+            if resume:
+                log.info("resuming previous session for issue #%d", state["issue"].number)
         else:
             log.info("retry impl attempt %d for issue #%d", state["impl_attempts"] + 1, state["issue"].number)
 
-        agent.implement_issue(state["issue"], state["project_path"], state["test_error"])
+        agent.implement_issue(state["issue"], state["project_path"], state["test_error"], resume=resume)
         return {"impl_attempts": state["impl_attempts"] + 1, "test_error": None}
 
     def run_tests_node(state: OrchestratorState) -> _TestUpdate:
