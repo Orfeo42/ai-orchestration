@@ -28,7 +28,7 @@ def configure_git(name: str, email: str) -> None:
 def get_project_name(labels: list[str]) -> str | None:
     for label in labels:
         if label.startswith(LABEL_PROJECT_PREFIX):
-            return label.removeprefix(LABEL_PROJECT_PREFIX)
+            return label.removeprefix(LABEL_PROJECT_PREFIX).strip()
     return None
 
 
