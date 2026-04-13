@@ -104,6 +104,9 @@ def poll_repo(
             process_issue(issue, project, forgejo, queue, graph, owner, repo)
         except Exception as exc:
             log.error("issue #%d failed: %s", issue.number, exc)
+            label_id = forgejo.get_label_id(owner, repo, LABEL_IN_PROGRESS)
+            if label_id is not None:
+                forgejo.remove_label(owner, repo, issue.number, label_id)
 
 
 def main() -> None:

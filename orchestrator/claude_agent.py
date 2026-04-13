@@ -30,6 +30,7 @@ class ClaudeAgent:
             [
                 "claude",
                 "--print",
+                "--dangerously-skip-permissions",
                 "--output-format", "text",
                 "--allowedTools", "Bash,Read,Edit,Write,Glob,Grep",
             ],
@@ -42,7 +43,7 @@ class ClaudeAgent:
         )
 
         if result.returncode != 0:
-            log.error("claude agent failed", code=result.returncode, stderr=result.stderr[:1000])
+            log.error("claude agent failed", code=result.returncode, stderr=result.stderr[:1000], stdout=result.stdout[:500])
             raise RuntimeError(f"claude exited {result.returncode}")
         
         log.info("claude agent finished successfully", issue=issue.number)

@@ -23,7 +23,18 @@ class GitOps:
 
     def create_branch(self, branch: str) -> None:
         log.info("creating branch", branch=branch, repo=f"{self._owner}/{self._repo}")
-        self._run(["git", "checkout", "-b", branch])
+        result = subprocess.run(
+            ["git", "checkout", "-b", branch],
+            cwd=self._path,
+            capture_output=True,
+            text=True,
+        )
+        if result.returncode != 0:
+            if "already exists" in result.stderr:
+                log.warning("branch already exists, checking out", branch=branch)
+                self._run(["git", "checkout", branch])
+            else:
+                raise subprocess.CalledProcessError(result.returncode, result.args, result.stderr)
 
     def checkout(self, branch: str) -> None:
         log.info("checking out branch", branch=branch, repo=f"{self._owner}/{self._repo}")

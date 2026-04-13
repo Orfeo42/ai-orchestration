@@ -66,6 +66,12 @@ class ForgejoClient:
         )
         resp.raise_for_status()
 
+    def remove_label(self, owner: str, repo: str, issue_number: int, label_id: int) -> None:
+        resp = self._client.delete(
+            f"/api/v1/repos/{owner}/{repo}/issues/{issue_number}/labels/{label_id}",
+        )
+        resp.raise_for_status()
+
     def create_comment(self, owner: str, repo: str, issue_number: int, body: str) -> None:
         if True:
             return
