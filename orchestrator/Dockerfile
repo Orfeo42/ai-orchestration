@@ -12,6 +12,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
+COPY orchestrator/claude/settings.json /root/.claude/settings.json
+
+RUN git clone --depth 1 https://github.com/JuliusBrussee/caveman.git \
+    /root/.claude/plugins/cache/caveman/caveman/92f892f2b997
+
 WORKDIR /app
 
 COPY orchestrator/pyproject.toml orchestrator/uv.lock* ./

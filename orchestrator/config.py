@@ -2,12 +2,19 @@ import json
 import os
 from pathlib import Path
 
-from pydantic import BaseModel, TypeAdapter
+from pydantic import BaseModel, TypeAdapter, computed_field
+
+PROJECTS_ROOT = Path("/projects")
 
 
 class ProjectConfig(BaseModel):
-    path: str
+    repo: str
     base_branch: str = "main"
+
+    @computed_field
+    @property
+    def path(self) -> str:
+        return str(PROJECTS_ROOT / self.repo.split("/", 1)[1])
 
 
 _projects_adapter = TypeAdapter(dict[str, ProjectConfig])
@@ -16,7 +23,8 @@ _projects_adapter = TypeAdapter(dict[str, ProjectConfig])
 class Config:
     forgejo_url: str
     forgejo_token: str
-    forgejo_repos: list[str]
+    forgejo_issue_repos: list[str]
+    forgejo_assignee: str | None
     anthropic_api_key: str
     redis_url: str
     projects: dict[str, ProjectConfig]
@@ -27,7 +35,8 @@ class Config:
     def __init__(self) -> None:
         self.forgejo_url = os.environ["FORGEJO_URL"]
         self.forgejo_token = os.environ["FORGEJO_TOKEN"]
-        self.forgejo_repos = [r.strip() for r in os.environ["FORGEJO_REPOS"].split(",")]
+        self.forgejo_issue_repos = [r.strip() for r in os.environ["FORGEJO_ISSUE_REPOS"].split(",")]
+        self.forgejo_assignee = os.environ.get("FORGEJO_ASSIGNEE")
         self.anthropic_api_key = os.environ["ANTHROPIC_API_KEY"]
         self.redis_url = os.environ.get("REDIS_URL", "redis://redis:6379")
         self.poll_interval = int(os.environ.get("POLL_INTERVAL", "60"))

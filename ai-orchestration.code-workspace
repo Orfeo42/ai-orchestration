@@ -25,7 +25,10 @@
         "files.exclude": {
             "**/__pycache__": true,
             "**/.venv": true,
-            "**/*.pyc": true
+            "**/*.pyc": true,
+            "orchestrator": true,
+            "reviewer": true,
+            "shared": true,
         }
     },
     "extensions": {

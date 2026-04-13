@@ -11,10 +11,24 @@ class ForgejoClient:
             timeout=30,
         )
 
-    def get_issues(self, owner: str, repo: str, label: str = "ai-implement") -> list[ForgejoIssue]:
+    def get_issues(
+        self,
+        owner: str,
+        repo: str,
+        label: str = "ai-implement",
+        assignee: str | None = None,
+    ) -> list[ForgejoIssue]:
+        params: dict[str, str | int] = {
+            "state": "open",
+            "type": "issues",
+            "labels": label,
+            "limit": 50,
+        }
+        if assignee is not None:
+            params["assignee"] = assignee
         resp = self._client.get(
             f"/api/v1/repos/{owner}/{repo}/issues",
-            params={"state": "open", "type": "issues", "labels": label, "limit": 50},
+            params=params,
         )
         resp.raise_for_status()
         issues = []
