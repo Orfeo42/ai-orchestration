@@ -1,4 +1,4 @@
-LABEL_IMPLEMENT = "ai-implement"
-LABEL_IN_PROGRESS = "ai-in-progress"
-LABEL_DONE = "ai-done"
+LABEL_IMPLEMENT = "ToDo"
+LABEL_IN_PROGRESS = "in-progress"
+LABEL_DONE = "done"
 LABEL_PROJECT_PREFIX = "project:"
