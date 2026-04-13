@@ -1,4 +1,3 @@
-import os
 import subprocess
 
 import structlog
@@ -9,8 +8,8 @@ log = structlog.get_logger(__name__)
 
 
 class ClaudeAgent:
-    def __init__(self, api_key: str) -> None:
-        self._api_key = api_key
+    def __init__(self) -> None:
+        pass
 
     def implement_issue(
         self,
@@ -19,13 +18,9 @@ class ClaudeAgent:
         test_error: str | None = None,
     ) -> None:
         prompt = self._build_prompt(issue, test_error)
-        env = {
-            **os.environ,
-            "ANTHROPIC_API_KEY": self._api_key,
-        }
 
         log.info("running claude agent", issue=issue.number, project_path=project_path)
-        
+
         result = subprocess.run(
             [
                 "claude",
@@ -36,7 +31,6 @@ class ClaudeAgent:
             ],
             input=prompt,
             cwd=project_path,
-            env=env,
             capture_output=True,
             text=True,
             timeout=600,

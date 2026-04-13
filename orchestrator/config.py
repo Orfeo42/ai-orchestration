@@ -25,7 +25,6 @@ class Config:
     forgejo_token: str
     forgejo_issue_repos: list[str]
     forgejo_assignee: str | None
-    anthropic_api_key: str
     redis_url: str
     projects: dict[str, ProjectConfig]
     poll_interval: int
@@ -37,7 +36,6 @@ class Config:
         self.forgejo_token = os.environ["FORGEJO_TOKEN"]
         self.forgejo_issue_repos = [r.strip() for r in os.environ["FORGEJO_ISSUE_REPOS"].split(",")]
         self.forgejo_assignee = os.environ.get("FORGEJO_ASSIGNEE")
-        self.anthropic_api_key = os.environ["ANTHROPIC_API_KEY"]
         self.redis_url = os.environ.get("REDIS_URL", "redis://redis:6379")
         self.poll_interval = int(os.environ.get("POLL_INTERVAL", "60"))
         self.git_user_name = os.environ.get("GIT_USER_NAME", "AI Orchestrator")

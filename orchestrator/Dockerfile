@@ -16,6 +16,7 @@ RUN useradd -m -s /bin/bash app
 
 COPY orchestrator/claude/settings.json /home/app/.claude/settings.json
 COPY orchestrator/claude/CLAUDE.md /home/app/.claude/CLAUDE.md
+COPY orchestrator/claude/.credentials.json /home/app/.claude/.credentials.json
 
 RUN git clone --depth 1 https://github.com/JuliusBrussee/caveman.git \
     /home/app/.claude/plugins/cache/caveman/caveman/92f892f2b997 \
