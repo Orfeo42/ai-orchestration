@@ -57,16 +57,9 @@ func TestParseID(t *testing.T) {
 - One test func per func under test.
 - Separate explicit `t.Run` per case. No loops over slices.
 - Mock all mockable external deps (interfaces).
+- run test with this command: `go test -short ./... | grep -vE "^(ok|[[:space:]]*\?|.*Redismq|PASS)"`
 
 ### Python Tests
 
 - Use `pytest`.
 - Mock with `unittest.mock` or `pytest-mock`.
-
-## Interaction rules
-
-- Read official docs before answering questions about libraries, tools, APIs
-
-## Communication
-
-/caveman ultra

@@ -10,5 +10,17 @@
       }
     }
   },
-  "effortLevel": "medium"
+  "effortLevel": "medium",
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "echo '{\"hookSpecificOutput\": {\"hookEventName\": \"SessionStart\", \"additionalContext\": \"CAVEMAN ULTRA UPGRADE: abbreviate (DB/auth/config/req/res/fn/impl), strip conjunctions, arrows for causality (X->Y), one word when one word enough.\"}}'"
+          }
+        ]
+      }
+    ]
+  }
 }

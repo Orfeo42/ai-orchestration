@@ -30,6 +30,7 @@ services:
       GIT_USER_NAME: ${GIT_USER_NAME:-AI Orchestrator}
       GIT_USER_EMAIL: ${GIT_USER_EMAIL:-ai@orchestrator.local}
       PROJECTS_CONFIG: /config/projects.json
+      GEMINI_API_KEY: ${GEMINI_API_KEY}
       TZ: Europe/Rome
     volumes:
       - ${PROJECTS_CONFIG_PATH:-./projects.json}:/config/projects.json:ro

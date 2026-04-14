@@ -2,7 +2,7 @@ import httpx
 import structlog
 
 from shared.constants import LABEL_IMPLEMENT
-from shared.models import ForgejoPR, ForgejoIssue
+from shared.models import ForgejoIssue, ForgejoPR
 
 log = structlog.get_logger(__name__)
 
@@ -30,7 +30,7 @@ class ForgejoClient:
         }
         if assignee is not None:
             params["assignee"] = assignee
-        
+
         log.debug("fetching issues", repo=f"{owner}/{repo}", label=label)
         resp = self._client.get(
             f"/api/v1/repos/{owner}/{repo}/issues",
@@ -40,15 +40,17 @@ class ForgejoClient:
         issues = []
         for raw in resp.json():
             labels = [lbl["name"] for lbl in raw.get("labels", [])]
-            issues.append(ForgejoIssue(
-                id=raw["id"],
-                number=raw["number"],
-                title=raw["title"],
-                body=raw.get("body", ""),
-                repo_owner=owner,
-                repo_name=repo,
-                labels=labels,
-            ))
+            issues.append(
+                ForgejoIssue(
+                    id=raw["id"],
+                    number=raw["number"],
+                    title=raw["title"],
+                    body=raw.get("body", ""),
+                    repo_owner=owner,
+                    repo_name=repo,
+                    labels=labels,
+                )
+            )
         return issues
 
     def get_label_id(self, owner: str, repo: str, label_name: str) -> int | None:
@@ -59,20 +61,26 @@ class ForgejoClient:
                 return label["id"]
         return None
 
-    def add_label(self, owner: str, repo: str, issue_number: int, label_id: int) -> None:
+    def add_label(
+        self, owner: str, repo: str, issue_number: int, label_id: int
+    ) -> None:
         resp = self._client.post(
             f"/api/v1/repos/{owner}/{repo}/issues/{issue_number}/labels",
             json={"labels": [label_id]},
         )
         resp.raise_for_status()
 
-    def remove_label(self, owner: str, repo: str, issue_number: int, label_id: int) -> None:
+    def remove_label(
+        self, owner: str, repo: str, issue_number: int, label_id: int
+    ) -> None:
         resp = self._client.delete(
             f"/api/v1/repos/{owner}/{repo}/issues/{issue_number}/labels/{label_id}",
         )
         resp.raise_for_status()
 
-    def create_comment(self, owner: str, repo: str, issue_number: int, body: str) -> None:
+    def create_comment(
+        self, owner: str, repo: str, issue_number: int, body: str
+    ) -> None:
         if True:
             return
         resp = self._client.post(
@@ -96,6 +104,13 @@ class ForgejoClient:
         )
         resp.raise_for_status()
         return ForgejoPR.model_validate(resp.json())
+
+    def update_pr(self, owner: str, repo: str, pr_number: int, body: str) -> None:
+        resp = self._client.patch(
+            f"/api/v1/repos/{owner}/{repo}/pulls/{pr_number}",
+            json={"body": body},
+        )
+        resp.raise_for_status()
 
     def get_pr_diff(self, owner: str, repo: str, pr_number: int) -> str:
         resp = self._client.get(f"/api/v1/repos/{owner}/{repo}/pulls/{pr_number}.diff")

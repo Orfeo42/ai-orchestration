@@ -2,11 +2,7 @@ import subprocess
 import time
 
 import structlog
-from claude_agent import ClaudeAgent
-from config import Config, ProjectConfig
-from graph import build_graph, initial_state
 from langgraph.graph.state import CompiledStateGraph
-from repo_manager import sync_all
 from shared.constants import (
     LABEL_DONE,
     LABEL_IN_PROGRESS,
@@ -16,6 +12,12 @@ from shared.forgejo import ForgejoClient
 from shared.logging_config import setup_logging
 from shared.models import ForgejoIssue
 from shared.queue import RedisQueue
+
+from claude_agent import ClaudeAgent
+from config import Config, ProjectConfig
+from graph import build_graph, initial_state
+from pr_description import PRDescriptionWriter
+from repo_manager import sync_all
 
 log = structlog.get_logger(__name__)
 
@@ -41,12 +43,16 @@ def should_skip(issue: ForgejoIssue, queue: RedisQueue, owner: str, repo: str) -
     return False
 
 
-def start_issue(forgejo: ForgejoClient, owner: str, repo: str, issue: ForgejoIssue) -> None:
+def start_issue(
+    forgejo: ForgejoClient, owner: str, repo: str, issue: ForgejoIssue
+) -> None:
     label_id = forgejo.get_label_id(owner, repo, LABEL_IN_PROGRESS)
     if label_id is not None:
         forgejo.add_label(owner, repo, issue.number, label_id)
     forgejo.create_comment(
-        owner, repo, issue.number,
+        owner,
+        repo,
+        issue.number,
         f"AI orchestrator started implementation on branch `ai/issue-{issue.number}`.",
     )
 
@@ -65,13 +71,15 @@ def process_issue(
     queue.mark_in_progress(key)
     start_issue(forgejo, issue_owner, issue_repo, issue)
     log.info("processing issue #%d → %s", issue.number, project.repo)
-    graph.invoke(initial_state(
-        issue=issue,
-        code_repo_owner=code_owner,
-        code_repo_name=code_repo,
-        project_path=project.path,
-        base_branch=project.base_branch,
-    ))
+    graph.invoke(
+        initial_state(
+            issue=issue,
+            code_repo_owner=code_owner,
+            code_repo_name=code_repo,
+            project_path=project.path,
+            base_branch=project.base_branch,
+        )
+    )
     queue.clear_in_progress(key)
     queue.mark_processed(key)
 
@@ -85,7 +93,9 @@ def poll_repo(
     config: Config,
 ) -> None:
     try:
-        issues = forgejo.get_issues(owner=owner,repo=repo, assignee=config.forgejo_assignee)
+        issues = forgejo.get_issues(
+            owner=owner, repo=repo, assignee=config.forgejo_assignee
+        )
     except Exception as exc:
         log.error("fetch issues failed for %s/%s: %s", owner, repo, exc)
         return
@@ -121,7 +131,16 @@ def main() -> None:
 
     forgejo = ForgejoClient(config.forgejo_url, config.forgejo_token)
     queue = RedisQueue(config.redis_url)
-    graph = build_graph(ClaudeAgent(timeout=config.claude_timeout), forgejo, queue, config)
+    pr_writer = (
+        PRDescriptionWriter(config.gemini_api_key) if config.gemini_api_key else None
+    )
+    graph = build_graph(
+        ClaudeAgent(timeout=config.claude_timeout),
+        forgejo,
+        queue,
+        config,
+        pr_writer=pr_writer,
+    )
 
     sync_all(config.projects, config.forgejo_url, config.forgejo_token)
 

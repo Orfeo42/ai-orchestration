@@ -5,16 +5,16 @@ import structlog
 from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.graph import END, StateGraph
 from langgraph.graph.state import CompiledStateGraph
-
-from claude_agent import ClaudeAgent
-from config import Config
 from shared.constants import LABEL_DONE, LABEL_IN_PROGRESS
 from shared.forgejo import ForgejoClient
 from shared.git_ops import GitOps
 from shared.models import ForgejoIssue, ReviewJob
 from shared.queue import RedisQueue
-from test_runner import run_tests
 
+from claude_agent import ClaudeAgent
+from config import Config
+from pr_description import PRDescriptionWriter
+from test_runner import run_tests
 
 log = structlog.get_logger(__name__)
 
@@ -57,6 +57,7 @@ def build_graph(
     forgejo: ForgejoClient,
     queue: RedisQueue,
     config: Config,
+    pr_writer: PRDescriptionWriter | None = None,
     checkpointer: BaseCheckpointSaver | None = None,
 ) -> CompiledStateGraph:
     def implement(state: OrchestratorState) -> _ImplUpdate:
@@ -67,12 +68,24 @@ def build_graph(
             git.create_branch(state["branch"])
             resume = LABEL_IN_PROGRESS in state["issue"].labels
             if resume:
-                log.info("resuming previous session for issue #%d", state["issue"].number)
+                log.info(
+                    "resuming previous session for issue #%d", state["issue"].number
+                )
         else:
-            log.info("retry impl attempt %d for issue #%d", state["impl_attempts"] + 1, state["issue"].number)
+            log.info(
+                "retry impl attempt %d for issue #%d",
+                state["impl_attempts"] + 1,
+                state["issue"].number,
+            )
 
-        output = agent.implement_issue(state["issue"], state["project_path"], state["test_error"], resume=resume)
-        return {"impl_attempts": state["impl_attempts"] + 1, "test_error": None, "console_output": output}
+        output = agent.implement_issue(
+            state["issue"], state["project_path"], state["test_error"], resume=resume
+        )
+        return {
+            "impl_attempts": state["impl_attempts"] + 1,
+            "test_error": None,
+            "console_output": output,
+        }
 
     def run_tests_node(state: OrchestratorState) -> _TestUpdate:
         if not _code_git(state, config).has_changes():
@@ -82,7 +95,9 @@ def build_graph(
         success, error = run_tests(state["project_path"])
         if success:
             return {"test_error": None}
-        log.warning("tests failed (attempt %d): %s", state["impl_attempts"], error[:200])
+        log.warning(
+            "tests failed (attempt %d): %s", state["impl_attempts"], error[:200]
+        )
         return {"test_error": error}
 
     def route_after_tests(state: OrchestratorState) -> str:
@@ -90,7 +105,9 @@ def build_graph(
             return END
         if state["test_error"] is not None:
             if state["impl_attempts"] >= MAX_IMPL_ATTEMPTS:
-                log.error("max impl attempts reached for issue #%d", state["issue"].number)
+                log.error(
+                    "max impl attempts reached for issue #%d", state["issue"].number
+                )
                 return END
             return "implement"
         return "create_pr"
@@ -108,7 +125,6 @@ def build_graph(
             state["code_repo_name"],
             title=f"feat: {issue.title}",
             body=(
-                f"relates to: {issue.repo_owner}/{issue.repo_name}#{issue.number}\n\n"
                 f"Implements [{issue.repo_owner}/{issue.repo_name}#{issue.number}]"
                 f"({config.forgejo_url}/{issue.repo_owner}/{issue.repo_name}/issues/{issue.number})"
             ),
@@ -116,7 +132,26 @@ def build_graph(
             base=state["base_branch"],
         )
 
-        diff = forgejo.get_pr_diff(state["code_repo_owner"], state["code_repo_name"], pr.number)
+        diff = forgejo.get_pr_diff(
+            state["code_repo_owner"], state["code_repo_name"], pr.number
+        )
+
+        if pr_writer is not None and diff:
+            try:
+                description = pr_writer.generate(issue, diff)
+                body = (
+                    f"relates to: {issue.repo_owner}/{issue.repo_name}#{issue.number}\n\n"
+                    + description
+                )
+                forgejo.update_pr(
+                    state["code_repo_owner"],
+                    state["code_repo_name"],
+                    pr.number,
+                    body=body,
+                )
+            except Exception as exc:
+                log.warning("PR description generation failed", error=str(exc))
+
         return {"pr_number": pr.number, "diff": diff}
 
     def queue_review(state: OrchestratorState) -> _ImplUpdate:
@@ -130,9 +165,13 @@ def build_graph(
         if done_id is not None:
             forgejo.add_label(issue.repo_owner, issue.repo_name, issue.number, done_id)
 
-        in_progress_id = forgejo.get_label_id(issue.repo_owner, issue.repo_name, LABEL_IN_PROGRESS)
+        in_progress_id = forgejo.get_label_id(
+            issue.repo_owner, issue.repo_name, LABEL_IN_PROGRESS
+        )
         if in_progress_id is not None:
-            forgejo.remove_label(issue.repo_owner, issue.repo_name, issue.number, in_progress_id)
+            forgejo.remove_label(
+                issue.repo_owner, issue.repo_name, issue.number, in_progress_id
+            )
 
         forgejo.create_comment(
             issue.repo_owner,
@@ -156,7 +195,13 @@ def build_graph(
 
         _code_git(state, config).checkout(state["base_branch"])
 
-        log.info("issue #%d → PR %s/%s#%d queued for review", issue.number, state["code_repo_owner"], state["code_repo_name"], pr_number)
+        log.info(
+            "issue #%d → PR %s/%s#%d queued for review",
+            issue.number,
+            state["code_repo_owner"],
+            state["code_repo_name"],
+            pr_number,
+        )
         return {}
 
     g: StateGraph = StateGraph(OrchestratorState)
@@ -167,11 +212,15 @@ def build_graph(
 
     g.set_entry_point("implement")
     g.add_edge("implement", "run_tests")
-    g.add_conditional_edges("run_tests", route_after_tests, {
-        "implement": "implement",
-        "create_pr": "create_pr",
-        END: END,
-    })
+    g.add_conditional_edges(
+        "run_tests",
+        route_after_tests,
+        {
+            "implement": "implement",
+            "create_pr": "create_pr",
+            END: END,
+        },
+    )
     g.add_edge("create_pr", "queue_review")
     g.add_edge("queue_review", END)
 

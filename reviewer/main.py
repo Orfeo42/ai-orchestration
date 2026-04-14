@@ -1,14 +1,15 @@
 import subprocess
 
 import structlog
-from config import Config
-from docs_writer import DocsWriter
-from gemini_reviewer import GeminiReviewer
-from graph import build_graph, initial_state
 from shared.forgejo import ForgejoClient
 from shared.logging_config import setup_logging
 from shared.models import ReviewJob
 from shared.queue import RedisQueue
+
+from config import Config
+from docs_writer import DocsWriter
+from gemini_reviewer import GeminiReviewer
+from graph import build_graph, initial_state
 
 log = structlog.get_logger(__name__)
 
@@ -28,7 +29,9 @@ def main() -> None:
     reviewer = GeminiReviewer(config.gemini_api_key)
     docs_writer = DocsWriter(config.gemini_api_key)
 
-    graph = build_graph(reviewer, docs_writer, forgejo, config.forgejo_url, config.forgejo_token)
+    graph = build_graph(
+        reviewer, docs_writer, forgejo, config.forgejo_url, config.forgejo_token
+    )
 
     log.info("reviewer started", primary=config.primary_reviewer)
 
@@ -37,7 +40,11 @@ def main() -> None:
             job = queue.pop_as("queue:review", ReviewJob, timeout=10)
             if job is None:
                 continue
-            log.info("reviewing PR", pr_number=job.pr_number, repo=f"{job.repo_owner}/{job.repo_name}")
+            log.info(
+                "reviewing PR",
+                pr_number=job.pr_number,
+                repo=f"{job.repo_owner}/{job.repo_name}",
+            )
             try:
                 graph.invoke(initial_state(job))
             except Exception as exc:

@@ -18,3 +18,5 @@ projects.json
 
 # Claude credentials (subscription auth)
 orchestrator/claude/.credentials.json
+
+**/.mypy_cache/
