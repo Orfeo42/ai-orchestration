@@ -11,7 +11,7 @@ def run_tests(project_path: str) -> tuple[bool, str]:
     cmd = None
 
     if (path / "go.mod").exists():
-        cmd = ["go", "test", "./..."]
+        cmd = ["go", "test", "-short", "./..."]
     elif (path / "pytest.ini").exists() or (path / "setup.cfg").exists():
         cmd = ["pytest", "--tb=short", "-q"]
     elif (path / "pyproject.toml").exists() and _has_pytest(path):

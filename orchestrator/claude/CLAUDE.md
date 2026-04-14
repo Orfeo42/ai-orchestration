@@ -4,6 +4,7 @@
 - Shell: bash
 - Go project layout: standard (`cmd/`, `internal/`, `pkg/`)
 - Python package manager: uv
+- No Docker daemon. Integration tests use testcontainers → always run Go tests with `-short` to skip them.
 
 ## Code style
 

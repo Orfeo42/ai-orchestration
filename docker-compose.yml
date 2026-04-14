@@ -30,6 +30,7 @@ services:
       GIT_USER_NAME: ${GIT_USER_NAME:-AI Orchestrator}
       GIT_USER_EMAIL: ${GIT_USER_EMAIL:-ai@orchestrator.local}
       PROJECTS_CONFIG: /config/projects.json
+      TZ: Europe/Rome
     volumes:
       - ${PROJECTS_CONFIG_PATH:-./projects.json}:/config/projects.json:ro
       - projects_data:/projects
@@ -49,6 +50,7 @@ services:
       REDIS_URL: ${REDIS_URL:-redis://redis:6379}
       GIT_USER_NAME: ${GIT_USER_NAME:-AI Reviewer}
       GIT_USER_EMAIL: ${GIT_USER_EMAIL:-ai-reviewer@orchestrator.local}
+      TZ: Europe/Rome
     volumes:
       - projects_data:/projects
 

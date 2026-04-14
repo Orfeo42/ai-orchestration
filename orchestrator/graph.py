@@ -130,6 +130,10 @@ def build_graph(
         if done_id is not None:
             forgejo.add_label(issue.repo_owner, issue.repo_name, issue.number, done_id)
 
+        in_progress_id = forgejo.get_label_id(issue.repo_owner, issue.repo_name, LABEL_IN_PROGRESS)
+        if in_progress_id is not None:
+            forgejo.remove_label(issue.repo_owner, issue.repo_name, issue.number, in_progress_id)
+
         forgejo.create_comment(
             issue.repo_owner,
             issue.repo_name,
