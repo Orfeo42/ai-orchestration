@@ -18,8 +18,8 @@ import (
 )
 
 var (
-	errNoChanges     = errors.New("no changes produced")
-	errIssueUnclear  = errors.New("issue requirements unclear")
+	errNoChanges    = errors.New("no changes produced")
+	errIssueUnclear = errors.New("issue requirements unclear")
 )
 
 type prDescWriter interface {
@@ -342,14 +342,14 @@ func createPRAndQueue(
 		}
 	}
 
-	if err := deps.fj.CreateComment(issueOwner, issueRepo, issue.Number,
+	/*if err := deps.fj.CreateComment(issueOwner, issueRepo, issue.Number,
 		fmt.Sprintf("PR created: [%s/%s#%d](%s/%s/%s/pulls/%d)",
 			codeOwner, codeName, pr.Number,
 			cfg.forgejoURL, codeOwner, codeName, pr.Number)); err != nil {
 		slog.WarnContext(ctx, "create pr comment failed",
 			"error", err,
 		)
-	}
+	}*/
 
 	job := models.ReviewJob{
 		RepoOwner:   codeOwner,
