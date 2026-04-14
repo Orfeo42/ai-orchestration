@@ -11,7 +11,6 @@ import (
 
 	"ai-orchestration/internal/agent"
 	"ai-orchestration/internal/forgejo"
-	"ai-orchestration/internal/gemini"
 	"ai-orchestration/internal/gitops"
 	"ai-orchestration/internal/models"
 	"ai-orchestration/internal/queue"
@@ -20,11 +19,34 @@ import (
 
 var errNoChanges = errors.New("no changes produced")
 
+type prDescWriter interface {
+	Generate(ctx context.Context, issue models.ForgejoIssue, projectPath, diff string) (string, error)
+}
+
+type fallbackPRWriter struct {
+	primary  prDescWriter
+	fallback prDescWriter
+}
+
+func (f *fallbackPRWriter) Generate(ctx context.Context, issue models.ForgejoIssue, projectPath, diff string) (string, error) {
+	desc, err := f.primary.Generate(ctx, issue, projectPath, diff)
+	if err == nil {
+		return desc, nil
+	}
+	if f.fallback == nil {
+		return "", err
+	}
+	slog.WarnContext(ctx, "primary pr writer failed, using fallback",
+		"error", err,
+	)
+	return f.fallback.Generate(ctx, issue, projectPath, diff)
+}
+
 type orchDeps struct {
 	fj         forgejo.Forgejo
 	rq         queue.Queue
 	claude     agent.Agent
-	prWriter   gemini.PRDescWriter
+	prWriter   prDescWriter
 	gitFactory gitops.Factory
 	runTests   testrunner.Runner
 }
@@ -127,12 +149,6 @@ func startIssue(ctx context.Context, fj forgejo.Forgejo, owner, repo string, iss
 				"error", err,
 			)
 		}
-	}
-	if err := fj.CreateComment(owner, repo, issue.Number,
-		fmt.Sprintf("AI orchestrator started implementation on branch `ai/issue-%d`.", issue.Number)); err != nil {
-		slog.WarnContext(ctx, "create start comment failed",
-			"error", err,
-		)
 	}
 }
 
@@ -246,7 +262,7 @@ func createPRAndQueue(
 	}
 
 	if deps.prWriter != nil && diff != "" {
-		desc, err := deps.prWriter.Generate(ctx, issue, diff)
+		desc, err := deps.prWriter.Generate(ctx, issue, proj.path(), diff)
 		if err != nil {
 			slog.WarnContext(ctx, "pr description generation failed",
 				"error", err,

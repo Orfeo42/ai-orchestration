@@ -41,7 +41,7 @@ func NewPRDescWriter(ctx context.Context, apiKey string) (*GeminiPRDescWriter, e
 	}, nil
 }
 
-func (p *GeminiPRDescWriter) Generate(ctx context.Context, issue models.ForgejoIssue, diff string) (string, error) {
+func (p *GeminiPRDescWriter) Generate(ctx context.Context, issue models.ForgejoIssue, _, diff string) (string, error) {
 	slog.InfoContext(ctx, "generating PR description",
 		"issue", issue.Number,
 	)

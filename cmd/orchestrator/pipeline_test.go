@@ -7,6 +7,7 @@ import (
 
 	"ai-orchestration/internal/agent"
 	"ai-orchestration/internal/forgejo"
+	"ai-orchestration/internal/gemini"
 	"ai-orchestration/internal/gitops"
 	"ai-orchestration/internal/models"
 	"ai-orchestration/internal/queue"
@@ -163,6 +164,90 @@ func TestPollRepo(t *testing.T) {
 		}
 		cfg := config{projects: map[string]projectConfig{}}
 		pollRepo(context.Background(), "owner", "repo", deps, cfg)
+	})
+}
+
+func TestFallbackPRWriter(t *testing.T) {
+	issue := models.ForgejoIssue{Number: 1, Title: "t"}
+
+	t.Run("primary success does not call fallback", func(t *testing.T) {
+		fallbackCalled := false
+		primary := &gemini.MockPRDescWriter{
+			GenerateFunc: func(ctx context.Context, issue models.ForgejoIssue, projectPath, diff string) (string, error) {
+				return "ok", nil
+			},
+		}
+		fallback := &gemini.MockPRDescWriter{
+			GenerateFunc: func(ctx context.Context, issue models.ForgejoIssue, projectPath, diff string) (string, error) {
+				fallbackCalled = true
+				return "", nil
+			},
+		}
+		w := &fallbackPRWriter{primary: primary, fallback: fallback}
+		got, err := w.Generate(context.Background(), issue, "/p", "d")
+		if err != nil {
+			t.Fatalf("unexpected err: %v", err)
+		}
+		if got != "ok" {
+			t.Errorf("got %q, want ok", got)
+		}
+		if fallbackCalled {
+			t.Error("fallback should not have been called")
+		}
+	})
+
+	t.Run("primary failure triggers fallback", func(t *testing.T) {
+		primary := &gemini.MockPRDescWriter{
+			GenerateFunc: func(ctx context.Context, issue models.ForgejoIssue, projectPath, diff string) (string, error) {
+				return "", errors.New("gemini out of credit")
+			},
+		}
+		fallback := &gemini.MockPRDescWriter{
+			GenerateFunc: func(ctx context.Context, issue models.ForgejoIssue, projectPath, diff string) (string, error) {
+				return "from claude", nil
+			},
+		}
+		w := &fallbackPRWriter{primary: primary, fallback: fallback}
+		got, err := w.Generate(context.Background(), issue, "/p", "d")
+		if err != nil {
+			t.Fatalf("unexpected err: %v", err)
+		}
+		if got != "from claude" {
+			t.Errorf("got %q, want 'from claude'", got)
+		}
+	})
+
+	t.Run("nil fallback returns primary error", func(t *testing.T) {
+		primaryErr := errors.New("boom")
+		primary := &gemini.MockPRDescWriter{
+			GenerateFunc: func(ctx context.Context, issue models.ForgejoIssue, projectPath, diff string) (string, error) {
+				return "", primaryErr
+			},
+		}
+		w := &fallbackPRWriter{primary: primary}
+		_, err := w.Generate(context.Background(), issue, "/p", "d")
+		if !errors.Is(err, primaryErr) {
+			t.Errorf("err = %v, want %v", err, primaryErr)
+		}
+	})
+
+	t.Run("both fail returns fallback error", func(t *testing.T) {
+		fallbackErr := errors.New("claude failed")
+		primary := &gemini.MockPRDescWriter{
+			GenerateFunc: func(ctx context.Context, issue models.ForgejoIssue, projectPath, diff string) (string, error) {
+				return "", errors.New("primary failed")
+			},
+		}
+		fallback := &gemini.MockPRDescWriter{
+			GenerateFunc: func(ctx context.Context, issue models.ForgejoIssue, projectPath, diff string) (string, error) {
+				return "", fallbackErr
+			},
+		}
+		w := &fallbackPRWriter{primary: primary, fallback: fallback}
+		_, err := w.Generate(context.Background(), issue, "/p", "d")
+		if !errors.Is(err, fallbackErr) {
+			t.Errorf("err = %v, want %v", err, fallbackErr)
+		}
 	})
 }
 

@@ -169,7 +169,7 @@ var _ PRDescWriter = &MockPRDescWriter{}
 //
 //		// make and configure a mocked PRDescWriter
 //		mockedPRDescWriter := &MockPRDescWriter{
-//			GenerateFunc: func(ctx context.Context, issue models.ForgejoIssue, diff string) (string, error) {
+//			GenerateFunc: func(ctx context.Context, issue models.ForgejoIssue, projectPath string, diff string) (string, error) {
 //				panic("mock out the Generate method")
 //			},
 //		}
@@ -180,7 +180,7 @@ var _ PRDescWriter = &MockPRDescWriter{}
 //	}
 type MockPRDescWriter struct {
 	// GenerateFunc mocks the Generate method.
-	GenerateFunc func(ctx context.Context, issue models.ForgejoIssue, diff string) (string, error)
+	GenerateFunc func(ctx context.Context, issue models.ForgejoIssue, projectPath string, diff string) (string, error)
 
 	// calls tracks calls to the methods.
 	calls struct {
@@ -190,6 +190,8 @@ type MockPRDescWriter struct {
 			Ctx context.Context
 			// Issue is the issue argument value.
 			Issue models.ForgejoIssue
+			// ProjectPath is the projectPath argument value.
+			ProjectPath string
 			// Diff is the diff argument value.
 			Diff string
 		}
@@ -198,23 +200,25 @@ type MockPRDescWriter struct {
 }
 
 // Generate calls GenerateFunc.
-func (mock *MockPRDescWriter) Generate(ctx context.Context, issue models.ForgejoIssue, diff string) (string, error) {
+func (mock *MockPRDescWriter) Generate(ctx context.Context, issue models.ForgejoIssue, projectPath string, diff string) (string, error) {
 	if mock.GenerateFunc == nil {
 		panic("MockPRDescWriter.GenerateFunc: method is nil but PRDescWriter.Generate was just called")
 	}
 	callInfo := struct {
-		Ctx   context.Context
-		Issue models.ForgejoIssue
-		Diff  string
+		Ctx         context.Context
+		Issue       models.ForgejoIssue
+		ProjectPath string
+		Diff        string
 	}{
-		Ctx:   ctx,
-		Issue: issue,
-		Diff:  diff,
+		Ctx:         ctx,
+		Issue:       issue,
+		ProjectPath: projectPath,
+		Diff:        diff,
 	}
 	mock.lockGenerate.Lock()
 	mock.calls.Generate = append(mock.calls.Generate, callInfo)
 	mock.lockGenerate.Unlock()
-	return mock.GenerateFunc(ctx, issue, diff)
+	return mock.GenerateFunc(ctx, issue, projectPath, diff)
 }
 
 // GenerateCalls gets all the calls that were made to Generate.
@@ -222,14 +226,16 @@ func (mock *MockPRDescWriter) Generate(ctx context.Context, issue models.Forgejo
 //
 //	len(mockedPRDescWriter.GenerateCalls())
 func (mock *MockPRDescWriter) GenerateCalls() []struct {
-	Ctx   context.Context
-	Issue models.ForgejoIssue
-	Diff  string
+	Ctx         context.Context
+	Issue       models.ForgejoIssue
+	ProjectPath string
+	Diff        string
 } {
 	var calls []struct {
-		Ctx   context.Context
-		Issue models.ForgejoIssue
-		Diff  string
+		Ctx         context.Context
+		Issue       models.ForgejoIssue
+		ProjectPath string
+		Diff        string
 	}
 	mock.lockGenerate.RLock()
 	calls = mock.calls.Generate

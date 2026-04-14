@@ -21,6 +21,7 @@ RUN useradd -m -s /bin/bash app
 COPY config/claude/settings.json /home/app/.claude/settings.json
 COPY config/claude/CLAUDE.md /home/app/.claude/CLAUDE.md
 COPY config/claude/.credentials.json /home/app/.claude/.credentials.json
+COPY config/claude/skills /home/app/.claude/skills
 
 RUN git clone --depth 1 https://github.com/JuliusBrussee/caveman.git \
     /home/app/.claude/plugins/cache/caveman/caveman/92f892f2b997 \

@@ -17,5 +17,5 @@ type DocsWriter interface {
 }
 
 type PRDescWriter interface {
-	Generate(ctx context.Context, issue models.ForgejoIssue, diff string) (string, error)
+	Generate(ctx context.Context, issue models.ForgejoIssue, projectPath, diff string) (string, error)
 }

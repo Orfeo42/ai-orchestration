@@ -64,6 +64,7 @@ func main() {
 		runTests:   testrunner.Run,
 	}
 
+	claudePW := agent.NewPRDescWriter(cfg.claudeTimeout)
 	if cfg.geminiAPIKey != nil {
 		pw, err := gemini.NewPRDescWriter(ctx, *cfg.geminiAPIKey)
 		if err != nil {
@@ -73,7 +74,9 @@ func main() {
 			os.Exit(1)
 		}
 		defer pw.Close()
-		deps.prWriter = pw
+		deps.prWriter = &fallbackPRWriter{primary: pw, fallback: claudePW}
+	} else {
+		deps.prWriter = claudePW
 	}
 
 	if err := syncAll(cfg.projects, cfg.forgejoURL, cfg.forgejoToken); err != nil {
