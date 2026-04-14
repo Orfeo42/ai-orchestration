@@ -1,11 +1,7 @@
-# Python
-__pycache__/
-*.pyc
-*.pyo
-.venv/
-
-# uv
-.python-version
+# Go
+/orchestrator
+/reviewer
+*.exe
 
 # env
 .env*
@@ -17,6 +13,8 @@ __pycache__/
 projects.json
 
 # Claude credentials (subscription auth)
-orchestrator/claude/.credentials.json
+config/claude/.credentials.json
 
-**/.mypy_cache/
+**/CLAUDE.*md
+
+.claude/

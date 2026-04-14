@@ -13,7 +13,7 @@ services:
   orchestrator:
     build:
       context: .
-      dockerfile: orchestrator/Dockerfile
+      dockerfile: Dockerfile.orchestrator
     restart: unless-stopped
     depends_on:
       redis:
@@ -24,7 +24,6 @@ services:
       FORGEJO_ISSUE_REPOS: ${FORGEJO_ISSUE_REPOS}
       FORGEJO_ASSIGNEE: ${FORGEJO_ASSIGNEE:-}
       REDIS_URL: ${REDIS_URL:-redis://redis:6379}
-      PYTHONUNBUFFERED: "1"
       POLL_INTERVAL: ${POLL_INTERVAL:-60}
       CLAUDE_TIMEOUT: ${CLAUDE_TIMEOUT:-3600}
       GIT_USER_NAME: ${GIT_USER_NAME:-AI Orchestrator}
@@ -39,7 +38,7 @@ services:
   reviewer:
     build:
       context: .
-      dockerfile: reviewer/Dockerfile
+      dockerfile: Dockerfile.reviewer
     restart: unless-stopped
     depends_on:
       redis:
