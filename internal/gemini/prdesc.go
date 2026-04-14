@@ -1,0 +1,65 @@
+package gemini
+
+import (
+	"context"
+	"fmt"
+	"log/slog"
+	"strings"
+
+	"ai-orchestration/internal/models"
+
+	"github.com/google/generative-ai-go/genai"
+)
+
+const prDescPrompt = `Write a pull request description for the following implementation.
+
+Issue #%d: %s
+
+%s
+
+Diff:
+` + "```diff\n%s\n```" + `
+
+Write a concise PR description in markdown. Include:
+- What was implemented
+- Key technical decisions if non-obvious
+- No fluff, no summaries of the diff line by line`
+
+type GeminiPRDescWriter struct {
+	client *genai.Client
+	model  *genai.GenerativeModel
+}
+
+func NewPRDescWriter(ctx context.Context, apiKey string) (*GeminiPRDescWriter, error) {
+	client, err := newClient(ctx, apiKey)
+	if err != nil {
+		return nil, fmt.Errorf("gemini client: %w", err)
+	}
+	return &GeminiPRDescWriter{
+		client: client,
+		model:  client.GenerativeModel("gemini-2.0-flash"),
+	}, nil
+}
+
+func (p *GeminiPRDescWriter) Generate(ctx context.Context, issue models.ForgejoIssue, diff string) (string, error) {
+	slog.InfoContext(ctx, "generating PR description",
+		"issue", issue.Number,
+	)
+	if len(diff) > 50000 {
+		diff = diff[:50000]
+	}
+	prompt := fmt.Sprintf(prDescPrompt, issue.Number, issue.Title, issue.Body, diff)
+	resp, err := p.model.GenerateContent(ctx, genai.Text(prompt))
+	if err != nil {
+		return "", fmt.Errorf("generate content: %w", err)
+	}
+	text, err := responseText(resp)
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(text), nil
+}
+
+func (p *GeminiPRDescWriter) Close() {
+	p.client.Close()
+}
