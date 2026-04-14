@@ -1,14 +1,9 @@
 package agent
 
 import (
-	"bytes"
 	"context"
 	"fmt"
-	"io"
 	"log/slog"
-	"os"
-	"os/exec"
-	"strings"
 	"time"
 
 	"ai-orchestration/internal/models"
@@ -42,23 +37,16 @@ func (c *ClaudePRDescWriter) Generate(ctx context.Context, issue models.ForgejoI
 
 	prompt := fmt.Sprintf(claudePRDescPrompt, issue.Number, issue.Title, issue.Body)
 
-	cmd := exec.CommandContext(cctx, "claude",
+	out, err := runClaudeStream(cctx, projectPath, prompt, []string{
 		"--print",
 		"--dangerously-skip-permissions",
+		"--output-format", "stream-json",
+		"--verbose",
 		"--allowedTools", "Bash,Read,Glob,Grep",
-	)
-	cmd.Dir = projectPath
-	cmd.Stdin = strings.NewReader(prompt)
-
-	var stdout, stderr bytes.Buffer
-	cmd.Stdout = io.MultiWriter(os.Stdout, &stdout)
-	cmd.Stderr = io.MultiWriter(os.Stderr, &stderr)
-
-	if err := cmd.Run(); err != nil {
-		return "", fmt.Errorf("claude pr desc: %w (stderr: %s)", err, strings.TrimSpace(stderr.String()))
+	})
+	if err != nil {
+		return "", fmt.Errorf("claude pr desc: %w", err)
 	}
-
-	out := strings.TrimSpace(stdout.String())
 	if out == "" {
 		return "", fmt.Errorf("claude pr desc: empty output")
 	}

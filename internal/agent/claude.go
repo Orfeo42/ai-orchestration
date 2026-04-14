@@ -53,27 +53,65 @@ func (a *ClaudeAgent) AssessIssue(issue models.ForgejoIssue, projectPath string)
 
 	prompt := fmt.Sprintf(claudeAssessPrompt, issue.Number, issue.Title, issue.Body)
 
-	cmd := exec.CommandContext(ctx, "claude",
+	out, err := runClaudeStream(ctx, projectPath, prompt, []string{
 		"--print",
 		"--dangerously-skip-permissions",
+		"--output-format", "stream-json",
+		"--verbose",
 		"--allowedTools", "Bash,Read,Glob,Grep",
-	)
-	cmd.Dir = projectPath
-	cmd.Stdin = strings.NewReader(prompt)
-
-	var stdout, stderr bytes.Buffer
-	cmd.Stdout = io.MultiWriter(os.Stdout, &stdout)
-	cmd.Stderr = io.MultiWriter(os.Stderr, &stderr)
-
-	if err := cmd.Run(); err != nil {
-		return Assessment{}, fmt.Errorf("claude assess: %w (stderr: %s)", err, strings.TrimSpace(stderr.String()))
+	})
+	if err != nil {
+		return Assessment{}, fmt.Errorf("claude assess: %w", err)
 	}
-
-	out := strings.TrimSpace(stdout.String())
 	if out == "" {
 		return Assessment{}, errEmptyAssessment
 	}
 	return parseAssessment(out)
+}
+
+func runClaudeStream(ctx context.Context, projectPath, prompt string, args []string) (string, error) {
+	cmd := exec.CommandContext(ctx, "claude", args...)
+	cmd.Dir = projectPath
+	cmd.Stdin = strings.NewReader(prompt)
+
+	stdout, err := cmd.StdoutPipe()
+	if err != nil {
+		return "", fmt.Errorf("stdout pipe: %w", err)
+	}
+	var stderr bytes.Buffer
+	cmd.Stderr = io.MultiWriter(os.Stderr, &stderr)
+
+	if err := cmd.Start(); err != nil {
+		return "", fmt.Errorf("start claude: %w", err)
+	}
+
+	var result string
+	scanner := bufio.NewScanner(stdout)
+	scanner.Buffer(make([]byte, 1024*1024), 1024*1024)
+	for scanner.Scan() {
+		line := scanner.Text()
+		logEvent(line)
+		if r := resultFromEvent(line); r != "" {
+			result = r
+		}
+	}
+
+	if err := cmd.Wait(); err != nil {
+		return "", fmt.Errorf("claude exited: %w (stderr: %s)", err, strings.TrimSpace(stderr.String()))
+	}
+	return strings.TrimSpace(result), nil
+}
+
+func resultFromEvent(line string) string {
+	var event map[string]any
+	if err := json.Unmarshal([]byte(line), &event); err != nil {
+		return ""
+	}
+	if event["type"] != "result" {
+		return ""
+	}
+	r, _ := event["result"].(string)
+	return r
 }
 
 func parseAssessment(out string) (Assessment, error) {
