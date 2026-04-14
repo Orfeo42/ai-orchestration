@@ -48,6 +48,84 @@ func TestBuildPrompt(t *testing.T) {
 	})
 }
 
+func TestParseAssessment(t *testing.T) {
+	t.Run("clear true", func(t *testing.T) {
+		got, err := parseAssessment(`{"clear": true}`)
+		if err != nil {
+			t.Fatalf("unexpected err: %v", err)
+		}
+		if !got.Clear {
+			t.Error("Clear = false, want true")
+		}
+	})
+
+	t.Run("clear false with questions", func(t *testing.T) {
+		got, err := parseAssessment(`{"clear": false, "questions": "- what X?"}`)
+		if err != nil {
+			t.Fatalf("unexpected err: %v", err)
+		}
+		if got.Clear {
+			t.Error("Clear = true, want false")
+		}
+		if got.Questions != "- what X?" {
+			t.Errorf("Questions = %q", got.Questions)
+		}
+	})
+
+	t.Run("json on last line ignores preamble", func(t *testing.T) {
+		got, err := parseAssessment("thinking...\nmore text\n{\"clear\": true}")
+		if err != nil {
+			t.Fatalf("unexpected err: %v", err)
+		}
+		if !got.Clear {
+			t.Error("Clear = false, want true")
+		}
+	})
+
+	t.Run("clear false without questions errors", func(t *testing.T) {
+		_, err := parseAssessment(`{"clear": false}`)
+		if err == nil {
+			t.Error("expected error")
+		}
+	})
+
+	t.Run("no json line errors", func(t *testing.T) {
+		_, err := parseAssessment("just prose, no json")
+		if err == nil {
+			t.Error("expected error")
+		}
+	})
+
+	t.Run("malformed json errors", func(t *testing.T) {
+		_, err := parseAssessment(`{"clear": notbool}`)
+		if err == nil {
+			t.Error("expected error")
+		}
+	})
+}
+
+func TestLastJSONLine(t *testing.T) {
+	t.Run("single json line", func(t *testing.T) {
+		got := lastJSONLine(`{"a":1}`)
+		if got != `{"a":1}` {
+			t.Errorf("got %q", got)
+		}
+	})
+
+	t.Run("last line is json", func(t *testing.T) {
+		got := lastJSONLine("prose\n{\"a\":1}")
+		if got != `{"a":1}` {
+			t.Errorf("got %q", got)
+		}
+	})
+
+	t.Run("no json returns empty", func(t *testing.T) {
+		if got := lastJSONLine("nothing\nhere"); got != "" {
+			t.Errorf("got %q", got)
+		}
+	})
+}
+
 func TestLogEvent(t *testing.T) {
 	t.Run("empty line no panic", func(t *testing.T) {
 		logEvent("")

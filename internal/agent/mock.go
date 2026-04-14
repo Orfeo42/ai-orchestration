@@ -18,6 +18,9 @@ var _ Agent = &MockAgent{}
 //
 //		// make and configure a mocked Agent
 //		mockedAgent := &MockAgent{
+//			AssessIssueFunc: func(issue models.ForgejoIssue, projectPath string) (Assessment, error) {
+//				panic("mock out the AssessIssue method")
+//			},
 //			ImplementIssueFunc: func(issue models.ForgejoIssue, projectPath string, testError *string, resume bool) (string, error) {
 //				panic("mock out the ImplementIssue method")
 //			},
@@ -28,11 +31,21 @@ var _ Agent = &MockAgent{}
 //
 //	}
 type MockAgent struct {
+	// AssessIssueFunc mocks the AssessIssue method.
+	AssessIssueFunc func(issue models.ForgejoIssue, projectPath string) (Assessment, error)
+
 	// ImplementIssueFunc mocks the ImplementIssue method.
 	ImplementIssueFunc func(issue models.ForgejoIssue, projectPath string, testError *string, resume bool) (string, error)
 
 	// calls tracks calls to the methods.
 	calls struct {
+		// AssessIssue holds details about calls to the AssessIssue method.
+		AssessIssue []struct {
+			// Issue is the issue argument value.
+			Issue models.ForgejoIssue
+			// ProjectPath is the projectPath argument value.
+			ProjectPath string
+		}
 		// ImplementIssue holds details about calls to the ImplementIssue method.
 		ImplementIssue []struct {
 			// Issue is the issue argument value.
@@ -45,7 +58,44 @@ type MockAgent struct {
 			Resume bool
 		}
 	}
+	lockAssessIssue    sync.RWMutex
 	lockImplementIssue sync.RWMutex
+}
+
+// AssessIssue calls AssessIssueFunc.
+func (mock *MockAgent) AssessIssue(issue models.ForgejoIssue, projectPath string) (Assessment, error) {
+	if mock.AssessIssueFunc == nil {
+		panic("MockAgent.AssessIssueFunc: method is nil but Agent.AssessIssue was just called")
+	}
+	callInfo := struct {
+		Issue       models.ForgejoIssue
+		ProjectPath string
+	}{
+		Issue:       issue,
+		ProjectPath: projectPath,
+	}
+	mock.lockAssessIssue.Lock()
+	mock.calls.AssessIssue = append(mock.calls.AssessIssue, callInfo)
+	mock.lockAssessIssue.Unlock()
+	return mock.AssessIssueFunc(issue, projectPath)
+}
+
+// AssessIssueCalls gets all the calls that were made to AssessIssue.
+// Check the length with:
+//
+//	len(mockedAgent.AssessIssueCalls())
+func (mock *MockAgent) AssessIssueCalls() []struct {
+	Issue       models.ForgejoIssue
+	ProjectPath string
+} {
+	var calls []struct {
+		Issue       models.ForgejoIssue
+		ProjectPath string
+	}
+	mock.lockAssessIssue.RLock()
+	calls = mock.calls.AssessIssue
+	mock.lockAssessIssue.RUnlock()
+	return calls
 }
 
 // ImplementIssue calls ImplementIssueFunc.

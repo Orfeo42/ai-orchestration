@@ -3,7 +3,9 @@ package main
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
+	"time"
 
 	"ai-orchestration/internal/agent"
 	"ai-orchestration/internal/forgejo"
@@ -165,6 +167,53 @@ func TestPollRepo(t *testing.T) {
 		cfg := config{projects: map[string]projectConfig{}}
 		pollRepo(context.Background(), "owner", "repo", deps, cfg)
 	})
+
+	t.Run("unclear issue marks processed and does not implement", func(t *testing.T) {
+		fj := &forgejo.MockForgejo{
+			GetIssuesFunc: func(owner, repo, label string, assignee *string) ([]models.ForgejoIssue, error) {
+				return []models.ForgejoIssue{
+					{Number: 99, Title: "Vague", Body: "x", Labels: []string{"To-do", "project:app"}},
+				}, nil
+			},
+			GetLabelIDFunc: func(owner, repo, name string) (*int, error) {
+				id := 1
+				return &id, nil
+			},
+			AddLabelFunc:      func(owner, repo string, issueNumber, labelID int) error { return nil },
+			RemoveLabelFunc:   func(owner, repo string, issueNumber, labelID int) error { return nil },
+			CreateCommentFunc: func(owner, repo string, issueNumber int, body string) error { return nil },
+		}
+		rq := &queue.MockQueue{
+			IsProcessedFunc:     func(ctx context.Context, key string) (bool, error) { return false, nil },
+			MarkInProgressFunc:  func(ctx context.Context, key string, ttl time.Duration) error { return nil },
+			MarkProcessedFunc:   func(ctx context.Context, key string) error { return nil },
+			ClearInProgressFunc: func(ctx context.Context, key string) error { return nil },
+		}
+		claudeMock := &agent.MockAgent{
+			AssessIssueFunc: func(issue models.ForgejoIssue, projectPath string) (agent.Assessment, error) {
+				return agent.Assessment{Clear: false, Questions: "- missing scope"}, nil
+			},
+			ImplementIssueFunc: func(issue models.ForgejoIssue, projectPath string, testError *string, resume bool) (string, error) {
+				t.Fatal("ImplementIssue must not be called when unclear")
+				return "", nil
+			},
+		}
+		deps := orchDeps{
+			fj:         fj,
+			rq:         rq,
+			claude:     claudeMock,
+			gitFactory: noopGitFactory,
+		}
+		cfg := config{projects: map[string]projectConfig{"app": {Repo: "owner/app", BaseBranch: "main"}}}
+		pollRepo(context.Background(), "owner", "repo", deps, cfg)
+
+		if len(rq.MarkProcessedCalls()) != 1 {
+			t.Errorf("MarkProcessed calls = %d, want 1", len(rq.MarkProcessedCalls()))
+		}
+		if len(fj.CreateCommentCalls()) != 1 {
+			t.Errorf("CreateComment calls = %d, want 1", len(fj.CreateCommentCalls()))
+		}
+	})
 }
 
 func TestFallbackPRWriter(t *testing.T) {
@@ -257,6 +306,9 @@ func TestProcessIssue(t *testing.T) {
 		proj := projectConfig{Repo: "owner/app", BaseBranch: "main"}
 
 		claudeMock := &agent.MockAgent{
+			AssessIssueFunc: func(issue models.ForgejoIssue, projectPath string) (agent.Assessment, error) {
+				return agent.Assessment{Clear: true}, nil
+			},
 			ImplementIssueFunc: func(issue models.ForgejoIssue, projectPath string, testError *string, resume bool) (string, error) {
 				return "", nil
 			},
@@ -288,6 +340,9 @@ func TestProcessIssue(t *testing.T) {
 		proj := projectConfig{Repo: "owner/app", BaseBranch: "main"}
 
 		claudeMock := &agent.MockAgent{
+			AssessIssueFunc: func(issue models.ForgejoIssue, projectPath string) (agent.Assessment, error) {
+				return agent.Assessment{Clear: true}, nil
+			},
 			ImplementIssueFunc: func(issue models.ForgejoIssue, projectPath string, testError *string, resume bool) (string, error) {
 				return "", errors.New("claude failed")
 			},
@@ -310,6 +365,133 @@ func TestProcessIssue(t *testing.T) {
 		err := processIssue(context.Background(), issue, proj, "owner", "repo", deps, config{})
 		if err == nil {
 			t.Error("expected error, got nil")
+		}
+	})
+
+	t.Run("unclear issue posts comment and returns errIssueUnclear", func(t *testing.T) {
+		issue := models.ForgejoIssue{Number: 7, Title: "Vague", Body: "do the thing", Labels: []string{}}
+		proj := projectConfig{Repo: "owner/app", BaseBranch: "main"}
+
+		claudeMock := &agent.MockAgent{
+			AssessIssueFunc: func(issue models.ForgejoIssue, projectPath string) (agent.Assessment, error) {
+				return agent.Assessment{Clear: false, Questions: "- which thing?\n- acceptance criteria?"}, nil
+			},
+			ImplementIssueFunc: func(issue models.ForgejoIssue, projectPath string, testError *string, resume bool) (string, error) {
+				t.Fatal("ImplementIssue must not be called when assessment is unclear")
+				return "", nil
+			},
+		}
+		fjMock := &forgejo.MockForgejo{
+			CreateCommentFunc: func(owner, repo string, issueNumber int, body string) error { return nil },
+			GetLabelIDFunc: func(owner, repo, name string) (*int, error) {
+				id := 1
+				return &id, nil
+			},
+			AddLabelFunc:    func(owner, repo string, issueNumber, labelID int) error { return nil },
+			RemoveLabelFunc: func(owner, repo string, issueNumber, labelID int) error { return nil },
+		}
+
+		deps := orchDeps{
+			fj:         fjMock,
+			rq:         &queue.MockQueue{},
+			claude:     claudeMock,
+			gitFactory: noopGitFactory,
+			runTests:   func(projectPath string) (bool, string) { return true, "" },
+		}
+
+		err := processIssue(context.Background(), issue, proj, "owner", "repo", deps, config{})
+		if !errors.Is(err, errIssueUnclear) {
+			t.Fatalf("err = %v, want errIssueUnclear", err)
+		}
+
+		comments := fjMock.CreateCommentCalls()
+		if len(comments) != 1 {
+			t.Fatalf("CreateComment calls = %d, want 1", len(comments))
+		}
+		if !strings.Contains(comments[0].Body, "which thing?") {
+			t.Errorf("comment body missing questions: %q", comments[0].Body)
+		}
+
+		added := fjMock.AddLabelCalls()
+		if len(added) != 1 {
+			t.Errorf("AddLabel calls = %d, want 1", len(added))
+		}
+	})
+
+	t.Run("assess error propagated without comment", func(t *testing.T) {
+		issue := models.ForgejoIssue{Number: 8, Title: "Thing", Labels: []string{}}
+		proj := projectConfig{Repo: "owner/app", BaseBranch: "main"}
+
+		claudeMock := &agent.MockAgent{
+			AssessIssueFunc: func(issue models.ForgejoIssue, projectPath string) (agent.Assessment, error) {
+				return agent.Assessment{}, errors.New("claude timeout")
+			},
+			ImplementIssueFunc: func(issue models.ForgejoIssue, projectPath string, testError *string, resume bool) (string, error) {
+				t.Fatal("ImplementIssue must not be called when assess fails")
+				return "", nil
+			},
+		}
+		fjMock := &forgejo.MockForgejo{}
+
+		deps := orchDeps{
+			fj:         fjMock,
+			rq:         &queue.MockQueue{},
+			claude:     claudeMock,
+			gitFactory: noopGitFactory,
+			runTests:   func(projectPath string) (bool, string) { return true, "" },
+		}
+
+		err := processIssue(context.Background(), issue, proj, "owner", "repo", deps, config{})
+		if err == nil || errors.Is(err, errIssueUnclear) {
+			t.Errorf("err = %v, want wrapped assess error", err)
+		}
+	})
+}
+
+func TestHandleUnclearIssue(t *testing.T) {
+	t.Run("posts comment, adds needs-info, removes in-progress", func(t *testing.T) {
+		issue := models.ForgejoIssue{Number: 42, Title: "t"}
+		labelIDs := map[string]int{forgejo.LabelNeedsInfo: 10, forgejo.LabelInProgress: 20}
+		fjMock := &forgejo.MockForgejo{
+			CreateCommentFunc: func(owner, repo string, issueNumber int, body string) error { return nil },
+			GetLabelIDFunc: func(owner, repo, name string) (*int, error) {
+				id, ok := labelIDs[name]
+				if !ok {
+					return nil, nil
+				}
+				return &id, nil
+			},
+			AddLabelFunc:    func(owner, repo string, issueNumber, labelID int) error { return nil },
+			RemoveLabelFunc: func(owner, repo string, issueNumber, labelID int) error { return nil },
+		}
+		deps := orchDeps{fj: fjMock}
+
+		err := handleUnclearIssue(context.Background(), issue, "owner", "repo", "- q1", deps)
+		if !errors.Is(err, errIssueUnclear) {
+			t.Fatalf("err = %v, want errIssueUnclear", err)
+		}
+
+		added := fjMock.AddLabelCalls()
+		if len(added) != 1 || added[0].LabelID != 10 {
+			t.Errorf("AddLabel = %+v, want one call with labelID 10", added)
+		}
+		removed := fjMock.RemoveLabelCalls()
+		if len(removed) != 1 || removed[0].LabelID != 20 {
+			t.Errorf("RemoveLabel = %+v, want one call with labelID 20", removed)
+		}
+	})
+
+	t.Run("comment failure returns error", func(t *testing.T) {
+		fjMock := &forgejo.MockForgejo{
+			CreateCommentFunc: func(owner, repo string, issueNumber int, body string) error {
+				return errors.New("network down")
+			},
+		}
+		deps := orchDeps{fj: fjMock}
+
+		err := handleUnclearIssue(context.Background(), models.ForgejoIssue{Number: 1}, "owner", "repo", "- q", deps)
+		if err == nil || errors.Is(err, errIssueUnclear) {
+			t.Errorf("err = %v, want wrapped comment error", err)
 		}
 	})
 }

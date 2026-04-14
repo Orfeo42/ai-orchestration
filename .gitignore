@@ -15,6 +15,5 @@ projects.json
 # Claude credentials (subscription auth)
 config/claude/.credentials.json
 
-**/CLAUDE.*md
 
 .claude/

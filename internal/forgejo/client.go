@@ -18,6 +18,7 @@ const (
 	LabelImplement     = "To-do"
 	LabelInProgress    = "in-progress"
 	LabelDone          = "done"
+	LabelNeedsInfo     = "needs-info"
 	LabelProjectPrefix = "project:"
 )
 

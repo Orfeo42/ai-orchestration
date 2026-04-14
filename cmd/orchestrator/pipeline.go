@@ -17,7 +17,10 @@ import (
 	"ai-orchestration/internal/testrunner"
 )
 
-var errNoChanges = errors.New("no changes produced")
+var (
+	errNoChanges     = errors.New("no changes produced")
+	errIssueUnclear  = errors.New("issue requirements unclear")
+)
 
 type prDescWriter interface {
 	Generate(ctx context.Context, issue models.ForgejoIssue, projectPath, diff string) (string, error)
@@ -106,10 +109,11 @@ func pollRepo(ctx context.Context, owner, repo string, deps orchDeps, cfg config
 			"issue", issue.Number,
 			"project", proj.Repo,
 		)
-		if err := processIssue(ctx, issue, proj, owner, repo, deps, cfg); err != nil {
+		procErr := processIssue(ctx, issue, proj, owner, repo, deps, cfg)
+		if procErr != nil && !errors.Is(procErr, errIssueUnclear) {
 			slog.ErrorContext(ctx, "issue processing failed",
 				"issue", issue.Number,
-				"error", err,
+				"error", procErr,
 			)
 			if clearErr := deps.rq.ClearInProgress(ctx, key); clearErr != nil {
 				slog.ErrorContext(ctx, "clear in-progress failed",
@@ -117,10 +121,10 @@ func pollRepo(ctx context.Context, owner, repo string, deps orchDeps, cfg config
 					"error", clearErr,
 				)
 			}
-			if labelID, err := deps.fj.GetLabelID(owner, repo, forgejo.LabelInProgress); err == nil && labelID != nil {
-				if err := deps.fj.RemoveLabel(owner, repo, issue.Number, *labelID); err != nil {
+			if labelID, lerr := deps.fj.GetLabelID(owner, repo, forgejo.LabelInProgress); lerr == nil && labelID != nil {
+				if rerr := deps.fj.RemoveLabel(owner, repo, issue.Number, *labelID); rerr != nil {
 					slog.WarnContext(ctx, "remove in-progress label failed",
-						"error", err,
+						"error", rerr,
 					)
 				}
 			}
@@ -163,6 +167,14 @@ func processIssue(
 	codeOwner, codeName, err := splitRepo(proj.Repo)
 	if err != nil {
 		return err
+	}
+
+	assess, err := deps.claude.AssessIssue(issue, proj.path())
+	if err != nil {
+		return fmt.Errorf("assess issue: %w", err)
+	}
+	if !assess.Clear {
+		return handleUnclearIssue(ctx, issue, issueOwner, issueRepo, assess.Questions, deps)
 	}
 
 	branch := fmt.Sprintf("feature/%d-%s", issue.Number, branchSlug(issue.Title))
@@ -223,6 +235,44 @@ func processIssue(
 	}
 
 	return createPRAndQueue(ctx, issue, proj, branch, issueOwner, issueRepo, codeOwner, codeName, deps, cfg)
+}
+
+func handleUnclearIssue(
+	ctx context.Context,
+	issue models.ForgejoIssue,
+	issueOwner, issueRepo, questions string,
+	deps orchDeps,
+) error {
+	slog.InfoContext(ctx, "issue requirements unclear, requesting clarification",
+		"issue", issue.Number,
+	)
+
+	body := "Requirements unclear, need clarification before implementation:\n\n" + questions
+	if err := deps.fj.CreateComment(issueOwner, issueRepo, issue.Number, body); err != nil {
+		return fmt.Errorf("create clarification comment: %w", err)
+	}
+
+	if labelID, err := deps.fj.GetLabelID(issueOwner, issueRepo, forgejo.LabelNeedsInfo); err == nil && labelID != nil {
+		if err := deps.fj.AddLabel(issueOwner, issueRepo, issue.Number, *labelID); err != nil {
+			slog.WarnContext(ctx, "add needs-info label failed",
+				"error", err,
+			)
+		}
+	} else if err != nil {
+		slog.WarnContext(ctx, "lookup needs-info label failed",
+			"error", err,
+		)
+	}
+
+	if labelID, err := deps.fj.GetLabelID(issueOwner, issueRepo, forgejo.LabelInProgress); err == nil && labelID != nil {
+		if err := deps.fj.RemoveLabel(issueOwner, issueRepo, issue.Number, *labelID); err != nil {
+			slog.WarnContext(ctx, "remove in-progress label failed",
+				"error", err,
+			)
+		}
+	}
+
+	return errIssueUnclear
 }
 
 func createPRAndQueue(

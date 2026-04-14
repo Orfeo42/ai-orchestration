@@ -2,7 +2,10 @@ package agent
 
 import (
 	"bufio"
+	"bytes"
+	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"os/exec"
@@ -12,12 +15,92 @@ import (
 	"ai-orchestration/internal/models"
 )
 
+var errEmptyAssessment = errors.New("empty assessment output")
+
 type ClaudeAgent struct {
 	timeout time.Duration
 }
 
 func New(timeout time.Duration) *ClaudeAgent {
 	return &ClaudeAgent{timeout: timeout}
+}
+
+const claudeAssessPrompt = `You are triaging a Forgejo issue before implementation.
+
+Issue #%d: %s
+
+%s
+
+Read project files as needed to understand context. Decide if the issue has enough detail to implement without guessing core behavior, public API, data model, or acceptance criteria.
+
+Output exactly one JSON line, nothing else. No preamble, no code fences, no trailing text.
+Schema:
+  {"clear": true}
+  {"clear": false, "questions": "- what is missing or ambiguous\n- another point"}
+
+The "questions" field, when present, must be concise markdown bullet points addressed to the issue author.`
+
+func (a *ClaudeAgent) AssessIssue(issue models.ForgejoIssue, projectPath string) (Assessment, error) {
+	slog.Info("assessing issue clarity",
+		"issue", issue.Number,
+		"path", projectPath,
+	)
+
+	ctx, cancel := context.WithTimeout(context.Background(), a.timeout)
+	defer cancel()
+
+	prompt := fmt.Sprintf(claudeAssessPrompt, issue.Number, issue.Title, issue.Body)
+
+	cmd := exec.CommandContext(ctx, "claude",
+		"--print",
+		"--dangerously-skip-permissions",
+		"--allowedTools", "Bash,Read,Glob,Grep",
+	)
+	cmd.Dir = projectPath
+	cmd.Stdin = strings.NewReader(prompt)
+
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+
+	if err := cmd.Run(); err != nil {
+		return Assessment{}, fmt.Errorf("claude assess: %w (stderr: %s)", err, strings.TrimSpace(stderr.String()))
+	}
+
+	out := strings.TrimSpace(stdout.String())
+	if out == "" {
+		return Assessment{}, errEmptyAssessment
+	}
+	return parseAssessment(out)
+}
+
+func parseAssessment(out string) (Assessment, error) {
+	line := lastJSONLine(out)
+	if line == "" {
+		return Assessment{}, fmt.Errorf("assessment: no json line in output: %s", out[:min(200, len(out))])
+	}
+	var raw struct {
+		Clear     bool   `json:"clear"`
+		Questions string `json:"questions"`
+	}
+	if err := json.Unmarshal([]byte(line), &raw); err != nil {
+		return Assessment{}, fmt.Errorf("assessment: unmarshal %q: %w", line, err)
+	}
+	if !raw.Clear && strings.TrimSpace(raw.Questions) == "" {
+		return Assessment{}, fmt.Errorf("assessment: clear=false but questions missing")
+	}
+	return Assessment{Clear: raw.Clear, Questions: raw.Questions}, nil
+}
+
+func lastJSONLine(s string) string {
+	lines := strings.Split(s, "\n")
+	for i := len(lines) - 1; i >= 0; i-- {
+		trimmed := strings.TrimSpace(lines[i])
+		if strings.HasPrefix(trimmed, "{") && strings.HasSuffix(trimmed, "}") {
+			return trimmed
+		}
+	}
+	return ""
 }
 
 func (a *ClaudeAgent) ImplementIssue(issue models.ForgejoIssue, projectPath string, testError *string, resume bool) (string, error) {
