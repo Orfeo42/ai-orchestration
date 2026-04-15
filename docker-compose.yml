@@ -1,0 +1,59 @@
+services:
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  orchestrator:
+    build:
+      context: .
+      dockerfile: Dockerfile.orchestrator
+    restart: unless-stopped
+    depends_on:
+      redis:
+        condition: service_healthy
+    environment:
+      FORGEJO_URL: ${FORGEJO_URL}
+      FORGEJO_TOKEN: ${FORGEJO_TOKEN}
+      FORGEJO_ISSUE_REPOS: ${FORGEJO_ISSUE_REPOS}
+      FORGEJO_ASSIGNEE: ${FORGEJO_ASSIGNEE:-}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379}
+      POLL_INTERVAL: ${POLL_INTERVAL:-60}
+      CLAUDE_TIMEOUT: ${CLAUDE_TIMEOUT:-3600}
+      GIT_USER_NAME: ${GIT_USER_NAME:-AI Orchestrator}
+      GIT_USER_EMAIL: ${GIT_USER_EMAIL:-ai@orchestrator.local}
+      PROJECTS_CONFIG: /config/projects.json
+      GEMINI_API_KEY: ${GEMINI_API_KEY}
+      TZ: Europe/Rome
+    volumes:
+      - ${PROJECTS_CONFIG_PATH:-./projects.json}:/config/projects.json:ro
+      - projects_data:/projects
+
+  reviewer:
+    build:
+      context: .
+      dockerfile: Dockerfile.reviewer
+    restart: unless-stopped
+    depends_on:
+      redis:
+        condition: service_healthy
+    environment:
+      FORGEJO_URL: ${FORGEJO_URL}
+      FORGEJO_TOKEN: ${FORGEJO_TOKEN}
+      GEMINI_API_KEY: ${GEMINI_API_KEY}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379}
+      GIT_USER_NAME: ${GIT_USER_NAME:-AI Reviewer}
+      GIT_USER_EMAIL: ${GIT_USER_EMAIL:-ai-reviewer@orchestrator.local}
+      TZ: Europe/Rome
+    volumes:
+      - projects_data:/projects
+
+volumes:
+  redis_data:
+  projects_data:

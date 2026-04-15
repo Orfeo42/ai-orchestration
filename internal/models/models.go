@@ -1,0 +1,70 @@
+package models
+
+import "strings"
+
+type ForgejoIssue struct {
+	ID        int      `json:"id"`
+	Number    int      `json:"number"`
+	Title     string   `json:"title"`
+	Body      string   `json:"body"`
+	RepoOwner string   `json:"repo_owner"`
+	RepoName  string   `json:"repo_name"`
+	Labels    []string `json:"labels"`
+}
+
+type ForgejoPR struct {
+	Number int    `json:"number"`
+	Title  string `json:"title"`
+	Body   string `json:"body"`
+}
+
+type ReviewJob struct {
+	RepoOwner   string `json:"repo_owner"`
+	RepoName    string `json:"repo_name"`
+	PRNumber    int    `json:"pr_number"`
+	PRTitle     string `json:"pr_title"`
+	PRBranch    string `json:"pr_branch"`
+	ProjectPath string `json:"project_path"`
+	IssueNumber int    `json:"issue_number"`
+	Diff        string `json:"diff"`
+}
+
+type ReviewResult struct {
+	Summary     string   `json:"summary"`
+	Issues      []string `json:"issues"`
+	Suggestions []string `json:"suggestions"`
+	Approved    bool     `json:"approved"`
+}
+
+func ParseReviewText(text string) ReviewResult {
+	lines := strings.Split(strings.TrimSpace(text), "\n")
+	result := ReviewResult{
+		Issues:      []string{},
+		Suggestions: []string{},
+	}
+	var section string
+
+	for _, line := range lines {
+		switch {
+		case strings.HasPrefix(line, "SUMMARY:"):
+			result.Summary = strings.TrimSpace(strings.TrimPrefix(line, "SUMMARY:"))
+			section = ""
+		case strings.HasPrefix(line, "APPROVED:"):
+			result.Approved = strings.Contains(strings.ToLower(line), "yes")
+			section = ""
+		case strings.HasPrefix(line, "ISSUES:"):
+			section = "issues"
+		case strings.HasPrefix(line, "SUGGESTIONS:"):
+			section = "suggestions"
+		case strings.HasPrefix(line, "- "):
+			item := line[2:]
+			switch section {
+			case "issues":
+				result.Issues = append(result.Issues, item)
+			case "suggestions":
+				result.Suggestions = append(result.Suggestions, item)
+			}
+		}
+	}
+	return result
+}

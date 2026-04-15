@@ -1,0 +1,19 @@
+# Go
+/orchestrator
+/reviewer
+*.exe
+
+# env
+.env*
+
+# VS Code
+.vscode/
+
+# projects config (contains local paths)
+projects.json
+
+# Claude credentials (subscription auth)
+config/claude/.credentials.json
+
+
+.claude/
