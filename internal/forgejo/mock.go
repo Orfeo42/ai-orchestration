@@ -30,6 +30,9 @@ var _ Forgejo = &MockForgejo{}
 //			CreatePRReviewFunc: func(owner string, repo string, prNumber int, body string, approved bool) error {
 //				panic("mock out the CreatePRReview method")
 //			},
+//			GetCommentsFunc: func(owner string, repo string, issueNumber int) ([]models.IssueComment, error) {
+//				panic("mock out the GetComments method")
+//			},
 //			GetIssuesFunc: func(owner string, repo string, label string, assignee *string) ([]models.ForgejoIssue, error) {
 //				panic("mock out the GetIssues method")
 //			},
@@ -63,6 +66,9 @@ type MockForgejo struct {
 
 	// CreatePRReviewFunc mocks the CreatePRReview method.
 	CreatePRReviewFunc func(owner string, repo string, prNumber int, body string, approved bool) error
+
+	// GetCommentsFunc mocks the GetComments method.
+	GetCommentsFunc func(owner string, repo string, issueNumber int) ([]models.IssueComment, error)
 
 	// GetIssuesFunc mocks the GetIssues method.
 	GetIssuesFunc func(owner string, repo string, label string, assignee *string) ([]models.ForgejoIssue, error)
@@ -131,6 +137,15 @@ type MockForgejo struct {
 			// Approved is the approved argument value.
 			Approved bool
 		}
+		// GetComments holds details about calls to the GetComments method.
+		GetComments []struct {
+			// Owner is the owner argument value.
+			Owner string
+			// Repo is the repo argument value.
+			Repo string
+			// IssueNumber is the issueNumber argument value.
+			IssueNumber int
+		}
 		// GetIssues holds details about calls to the GetIssues method.
 		GetIssues []struct {
 			// Owner is the owner argument value.
@@ -187,6 +202,7 @@ type MockForgejo struct {
 	lockCreateComment  sync.RWMutex
 	lockCreatePR       sync.RWMutex
 	lockCreatePRReview sync.RWMutex
+	lockGetComments    sync.RWMutex
 	lockGetIssues      sync.RWMutex
 	lockGetLabelID     sync.RWMutex
 	lockGetPRDiff      sync.RWMutex
@@ -379,6 +395,46 @@ func (mock *MockForgejo) CreatePRReviewCalls() []struct {
 	mock.lockCreatePRReview.RLock()
 	calls = mock.calls.CreatePRReview
 	mock.lockCreatePRReview.RUnlock()
+	return calls
+}
+
+// GetComments calls GetCommentsFunc.
+func (mock *MockForgejo) GetComments(owner string, repo string, issueNumber int) ([]models.IssueComment, error) {
+	if mock.GetCommentsFunc == nil {
+		panic("MockForgejo.GetCommentsFunc: method is nil but Forgejo.GetComments was just called")
+	}
+	callInfo := struct {
+		Owner       string
+		Repo        string
+		IssueNumber int
+	}{
+		Owner:       owner,
+		Repo:        repo,
+		IssueNumber: issueNumber,
+	}
+	mock.lockGetComments.Lock()
+	mock.calls.GetComments = append(mock.calls.GetComments, callInfo)
+	mock.lockGetComments.Unlock()
+	return mock.GetCommentsFunc(owner, repo, issueNumber)
+}
+
+// GetCommentsCalls gets all the calls that were made to GetComments.
+// Check the length with:
+//
+//	len(mockedForgejo.GetCommentsCalls())
+func (mock *MockForgejo) GetCommentsCalls() []struct {
+	Owner       string
+	Repo        string
+	IssueNumber int
+} {
+	var calls []struct {
+		Owner       string
+		Repo        string
+		IssueNumber int
+	}
+	mock.lockGetComments.RLock()
+	calls = mock.calls.GetComments
+	mock.lockGetComments.RUnlock()
 	return calls
 }
 

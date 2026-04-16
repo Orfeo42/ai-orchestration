@@ -89,6 +89,32 @@ func (c *Client) GetIssues(owner, repo, label string, assignee *string) ([]model
 	return issues, nil
 }
 
+func (c *Client) GetComments(owner, repo string, issueNumber int) ([]models.IssueComment, error) {
+	body, err := c.get(fmt.Sprintf("/api/v1/repos/%s/%s/issues/%d/comments", owner, repo, issueNumber))
+	if err != nil {
+		return nil, err
+	}
+
+	var raw []struct {
+		Body string `json:"body"`
+		User struct {
+			Login string `json:"login"`
+		} `json:"user"`
+	}
+	if err := json.Unmarshal(body, &raw); err != nil {
+		return nil, fmt.Errorf("unmarshal comments: %w", err)
+	}
+
+	comments := make([]models.IssueComment, len(raw))
+	for i, r := range raw {
+		comments[i] = models.IssueComment{
+			Author: r.User.Login,
+			Body:   r.Body,
+		}
+	}
+	return comments, nil
+}
+
 func (c *Client) GetLabelID(owner, repo, name string) (*int, error) {
 	body, err := c.get(fmt.Sprintf("/api/v1/repos/%s/%s/labels", owner, repo))
 	if err != nil {

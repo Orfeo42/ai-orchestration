@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"ai-orchestration/internal/agent"
+	"ai-orchestration/internal/events"
 	"ai-orchestration/internal/forgejo"
 	"ai-orchestration/internal/gemini"
 	"ai-orchestration/internal/gitops"
@@ -168,12 +169,15 @@ func TestPollRepo(t *testing.T) {
 		pollRepo(context.Background(), "owner", "repo", deps, cfg)
 	})
 
-	t.Run("unclear issue marks processed and does not implement", func(t *testing.T) {
+	t.Run("unclear issue does not mark processed so author answers are reprocessed", func(t *testing.T) {
 		fj := &forgejo.MockForgejo{
 			GetIssuesFunc: func(owner, repo, label string, assignee *string) ([]models.ForgejoIssue, error) {
 				return []models.ForgejoIssue{
 					{Number: 99, Title: "Vague", Body: "x", Labels: []string{"To-do", "project:app"}},
 				}, nil
+			},
+			GetCommentsFunc: func(owner, repo string, issueNumber int) ([]models.IssueComment, error) {
+				return nil, nil
 			},
 			GetLabelIDFunc: func(owner, repo, name string) (*int, error) {
 				id := 1
@@ -190,12 +194,12 @@ func TestPollRepo(t *testing.T) {
 			ClearInProgressFunc: func(ctx context.Context, key string) error { return nil },
 		}
 		claudeMock := &agent.MockAgent{
-			AssessIssueFunc: func(issue models.ForgejoIssue, projectPath string) (agent.Assessment, error) {
-				return agent.Assessment{Clear: false, Questions: "- missing scope"}, nil
+			AssessIssueFunc: func(ctx context.Context, issue models.ForgejoIssue, comments []models.IssueComment, projectPath string, sink events.Sink) (agent.AssessResult, error) {
+				return agent.AssessResult{Assessment: agent.Assessment{Clear: false, Questions: "- missing scope"}}, nil
 			},
-			ImplementIssueFunc: func(issue models.ForgejoIssue, projectPath string, testError *string, resume bool) (string, error) {
+			ImplementIssueFunc: func(ctx context.Context, issue models.ForgejoIssue, projectPath, sessionID string, testError *string, sink events.Sink) (agent.ImplementResult, error) {
 				t.Fatal("ImplementIssue must not be called when unclear")
-				return "", nil
+				return agent.ImplementResult{}, nil
 			},
 		}
 		deps := orchDeps{
@@ -207,12 +211,37 @@ func TestPollRepo(t *testing.T) {
 		cfg := config{projects: map[string]projectConfig{"app": {Repo: "owner/app", BaseBranch: "main"}}}
 		pollRepo(context.Background(), "owner", "repo", deps, cfg)
 
-		if len(rq.MarkProcessedCalls()) != 1 {
-			t.Errorf("MarkProcessed calls = %d, want 1", len(rq.MarkProcessedCalls()))
+		if len(rq.MarkProcessedCalls()) != 0 {
+			t.Errorf("MarkProcessed calls = %d, want 0 (unclear issue must remain reprocessable)", len(rq.MarkProcessedCalls()))
+		}
+		if len(rq.ClearInProgressCalls()) != 1 {
+			t.Errorf("ClearInProgress calls = %d, want 1", len(rq.ClearInProgressCalls()))
 		}
 		if len(fj.CreateCommentCalls()) != 1 {
 			t.Errorf("CreateComment calls = %d, want 1", len(fj.CreateCommentCalls()))
 		}
+	})
+
+	t.Run("needs-info label skips issue without assessing", func(t *testing.T) {
+		fj := &forgejo.MockForgejo{
+			GetIssuesFunc: func(owner, repo, label string, assignee *string) ([]models.ForgejoIssue, error) {
+				return []models.ForgejoIssue{
+					{Number: 100, Title: "Pending author", Labels: []string{"To-do", "project:app", forgejo.LabelNeedsInfo}},
+				}, nil
+			},
+		}
+		rq := &queue.MockQueue{
+			IsProcessedFunc: func(ctx context.Context, key string) (bool, error) { return false, nil },
+		}
+		claudeMock := &agent.MockAgent{
+			AssessIssueFunc: func(ctx context.Context, issue models.ForgejoIssue, comments []models.IssueComment, projectPath string, sink events.Sink) (agent.AssessResult, error) {
+				t.Fatal("AssessIssue must not be called while needs-info label is present")
+				return agent.AssessResult{}, nil
+			},
+		}
+		deps := orchDeps{fj: fj, rq: rq, claude: claudeMock, gitFactory: noopGitFactory}
+		cfg := config{projects: map[string]projectConfig{"app": {Repo: "owner/app", BaseBranch: "main"}}}
+		pollRepo(context.Background(), "owner", "repo", deps, cfg)
 	})
 }
 
@@ -222,18 +251,18 @@ func TestFallbackPRWriter(t *testing.T) {
 	t.Run("primary success does not call fallback", func(t *testing.T) {
 		fallbackCalled := false
 		primary := &gemini.MockPRDescWriter{
-			GenerateFunc: func(ctx context.Context, issue models.ForgejoIssue, projectPath, diff string) (string, error) {
+			GenerateFunc: func(ctx context.Context, issue models.ForgejoIssue, projectPath, diff string, sink events.Sink) (string, error) {
 				return "ok", nil
 			},
 		}
 		fallback := &gemini.MockPRDescWriter{
-			GenerateFunc: func(ctx context.Context, issue models.ForgejoIssue, projectPath, diff string) (string, error) {
+			GenerateFunc: func(ctx context.Context, issue models.ForgejoIssue, projectPath, diff string, sink events.Sink) (string, error) {
 				fallbackCalled = true
 				return "", nil
 			},
 		}
 		w := &fallbackPRWriter{primary: primary, fallback: fallback}
-		got, err := w.Generate(context.Background(), issue, "/p", "d")
+		got, err := w.Generate(context.Background(), issue, "/p", "d", events.NoopSink{})
 		if err != nil {
 			t.Fatalf("unexpected err: %v", err)
 		}
@@ -247,17 +276,17 @@ func TestFallbackPRWriter(t *testing.T) {
 
 	t.Run("primary failure triggers fallback", func(t *testing.T) {
 		primary := &gemini.MockPRDescWriter{
-			GenerateFunc: func(ctx context.Context, issue models.ForgejoIssue, projectPath, diff string) (string, error) {
+			GenerateFunc: func(ctx context.Context, issue models.ForgejoIssue, projectPath, diff string, sink events.Sink) (string, error) {
 				return "", errors.New("gemini out of credit")
 			},
 		}
 		fallback := &gemini.MockPRDescWriter{
-			GenerateFunc: func(ctx context.Context, issue models.ForgejoIssue, projectPath, diff string) (string, error) {
+			GenerateFunc: func(ctx context.Context, issue models.ForgejoIssue, projectPath, diff string, sink events.Sink) (string, error) {
 				return "from claude", nil
 			},
 		}
 		w := &fallbackPRWriter{primary: primary, fallback: fallback}
-		got, err := w.Generate(context.Background(), issue, "/p", "d")
+		got, err := w.Generate(context.Background(), issue, "/p", "d", events.NoopSink{})
 		if err != nil {
 			t.Fatalf("unexpected err: %v", err)
 		}
@@ -269,12 +298,12 @@ func TestFallbackPRWriter(t *testing.T) {
 	t.Run("nil fallback returns primary error", func(t *testing.T) {
 		primaryErr := errors.New("boom")
 		primary := &gemini.MockPRDescWriter{
-			GenerateFunc: func(ctx context.Context, issue models.ForgejoIssue, projectPath, diff string) (string, error) {
+			GenerateFunc: func(ctx context.Context, issue models.ForgejoIssue, projectPath, diff string, sink events.Sink) (string, error) {
 				return "", primaryErr
 			},
 		}
 		w := &fallbackPRWriter{primary: primary}
-		_, err := w.Generate(context.Background(), issue, "/p", "d")
+		_, err := w.Generate(context.Background(), issue, "/p", "d", events.NoopSink{})
 		if !errors.Is(err, primaryErr) {
 			t.Errorf("err = %v, want %v", err, primaryErr)
 		}
@@ -283,17 +312,17 @@ func TestFallbackPRWriter(t *testing.T) {
 	t.Run("both fail returns fallback error", func(t *testing.T) {
 		fallbackErr := errors.New("claude failed")
 		primary := &gemini.MockPRDescWriter{
-			GenerateFunc: func(ctx context.Context, issue models.ForgejoIssue, projectPath, diff string) (string, error) {
+			GenerateFunc: func(ctx context.Context, issue models.ForgejoIssue, projectPath, diff string, sink events.Sink) (string, error) {
 				return "", errors.New("primary failed")
 			},
 		}
 		fallback := &gemini.MockPRDescWriter{
-			GenerateFunc: func(ctx context.Context, issue models.ForgejoIssue, projectPath, diff string) (string, error) {
+			GenerateFunc: func(ctx context.Context, issue models.ForgejoIssue, projectPath, diff string, sink events.Sink) (string, error) {
 				return "", fallbackErr
 			},
 		}
 		w := &fallbackPRWriter{primary: primary, fallback: fallback}
-		_, err := w.Generate(context.Background(), issue, "/p", "d")
+		_, err := w.Generate(context.Background(), issue, "/p", "d", events.NoopSink{})
 		if !errors.Is(err, fallbackErr) {
 			t.Errorf("err = %v, want %v", err, fallbackErr)
 		}
@@ -306,11 +335,11 @@ func TestProcessIssue(t *testing.T) {
 		proj := projectConfig{Repo: "owner/app", BaseBranch: "main"}
 
 		claudeMock := &agent.MockAgent{
-			AssessIssueFunc: func(issue models.ForgejoIssue, projectPath string) (agent.Assessment, error) {
-				return agent.Assessment{Clear: true}, nil
+			AssessIssueFunc: func(ctx context.Context, issue models.ForgejoIssue, comments []models.IssueComment, projectPath string, sink events.Sink) (agent.AssessResult, error) {
+				return agent.AssessResult{Assessment: agent.Assessment{Clear: true}}, nil
 			},
-			ImplementIssueFunc: func(issue models.ForgejoIssue, projectPath string, testError *string, resume bool) (string, error) {
-				return "", nil
+			ImplementIssueFunc: func(ctx context.Context, issue models.ForgejoIssue, projectPath, sessionID string, testError *string, sink events.Sink) (agent.ImplementResult, error) {
+				return agent.ImplementResult{}, nil
 			},
 		}
 		gitMock := &gitops.MockGit{
@@ -320,7 +349,9 @@ func TestProcessIssue(t *testing.T) {
 		}
 
 		deps := orchDeps{
-			fj:     &forgejo.MockForgejo{},
+			fj: &forgejo.MockForgejo{
+				GetCommentsFunc: func(owner, repo string, issueNumber int) ([]models.IssueComment, error) { return nil, nil },
+			},
 			rq:     &queue.MockQueue{},
 			claude: claudeMock,
 			gitFactory: func(repoPath, forgejoURL, token, owner, repo string) gitops.Git {
@@ -340,11 +371,11 @@ func TestProcessIssue(t *testing.T) {
 		proj := projectConfig{Repo: "owner/app", BaseBranch: "main"}
 
 		claudeMock := &agent.MockAgent{
-			AssessIssueFunc: func(issue models.ForgejoIssue, projectPath string) (agent.Assessment, error) {
-				return agent.Assessment{Clear: true}, nil
+			AssessIssueFunc: func(ctx context.Context, issue models.ForgejoIssue, comments []models.IssueComment, projectPath string, sink events.Sink) (agent.AssessResult, error) {
+				return agent.AssessResult{Assessment: agent.Assessment{Clear: true}}, nil
 			},
-			ImplementIssueFunc: func(issue models.ForgejoIssue, projectPath string, testError *string, resume bool) (string, error) {
-				return "", errors.New("claude failed")
+			ImplementIssueFunc: func(ctx context.Context, issue models.ForgejoIssue, projectPath, sessionID string, testError *string, sink events.Sink) (agent.ImplementResult, error) {
+				return agent.ImplementResult{}, errors.New("claude failed")
 			},
 		}
 		gitMock := &gitops.MockGit{
@@ -353,7 +384,9 @@ func TestProcessIssue(t *testing.T) {
 		}
 
 		deps := orchDeps{
-			fj:     &forgejo.MockForgejo{},
+			fj: &forgejo.MockForgejo{
+				GetCommentsFunc: func(owner, repo string, issueNumber int) ([]models.IssueComment, error) { return nil, nil },
+			},
 			rq:     &queue.MockQueue{},
 			claude: claudeMock,
 			gitFactory: func(repoPath, forgejoURL, token, owner, repo string) gitops.Git {
@@ -373,15 +406,16 @@ func TestProcessIssue(t *testing.T) {
 		proj := projectConfig{Repo: "owner/app", BaseBranch: "main"}
 
 		claudeMock := &agent.MockAgent{
-			AssessIssueFunc: func(issue models.ForgejoIssue, projectPath string) (agent.Assessment, error) {
-				return agent.Assessment{Clear: false, Questions: "- which thing?\n- acceptance criteria?"}, nil
+			AssessIssueFunc: func(ctx context.Context, issue models.ForgejoIssue, comments []models.IssueComment, projectPath string, sink events.Sink) (agent.AssessResult, error) {
+				return agent.AssessResult{Assessment: agent.Assessment{Clear: false, Questions: "- which thing?\n- acceptance criteria?"}}, nil
 			},
-			ImplementIssueFunc: func(issue models.ForgejoIssue, projectPath string, testError *string, resume bool) (string, error) {
+			ImplementIssueFunc: func(ctx context.Context, issue models.ForgejoIssue, projectPath, sessionID string, testError *string, sink events.Sink) (agent.ImplementResult, error) {
 				t.Fatal("ImplementIssue must not be called when assessment is unclear")
-				return "", nil
+				return agent.ImplementResult{}, nil
 			},
 		}
 		fjMock := &forgejo.MockForgejo{
+			GetCommentsFunc:   func(owner, repo string, issueNumber int) ([]models.IssueComment, error) { return nil, nil },
 			CreateCommentFunc: func(owner, repo string, issueNumber int, body string) error { return nil },
 			GetLabelIDFunc: func(owner, repo, name string) (*int, error) {
 				id := 1
@@ -423,15 +457,17 @@ func TestProcessIssue(t *testing.T) {
 		proj := projectConfig{Repo: "owner/app", BaseBranch: "main"}
 
 		claudeMock := &agent.MockAgent{
-			AssessIssueFunc: func(issue models.ForgejoIssue, projectPath string) (agent.Assessment, error) {
-				return agent.Assessment{}, errors.New("claude timeout")
+			AssessIssueFunc: func(ctx context.Context, issue models.ForgejoIssue, comments []models.IssueComment, projectPath string, sink events.Sink) (agent.AssessResult, error) {
+				return agent.AssessResult{}, errors.New("claude timeout")
 			},
-			ImplementIssueFunc: func(issue models.ForgejoIssue, projectPath string, testError *string, resume bool) (string, error) {
+			ImplementIssueFunc: func(ctx context.Context, issue models.ForgejoIssue, projectPath, sessionID string, testError *string, sink events.Sink) (agent.ImplementResult, error) {
 				t.Fatal("ImplementIssue must not be called when assess fails")
-				return "", nil
+				return agent.ImplementResult{}, nil
 			},
 		}
-		fjMock := &forgejo.MockForgejo{}
+		fjMock := &forgejo.MockForgejo{
+			GetCommentsFunc: func(owner, repo string, issueNumber int) ([]models.IssueComment, error) { return nil, nil },
+		}
 
 		deps := orchDeps{
 			fj:         fjMock,

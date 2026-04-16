@@ -1,7 +1,7 @@
 services:
   orchestrator:
     build:
-      dockerfile: Dockerfile.orchestrator.debug
+      dockerfile: cmd/orchestrator/Dockerfile.debug
     ports:
       - "2345:2345"
     cap_add:

@@ -12,6 +12,11 @@ type ForgejoIssue struct {
 	Labels    []string `json:"labels"`
 }
 
+type IssueComment struct {
+	Author string `json:"author"`
+	Body   string `json:"body"`
+}
+
 type ForgejoPR struct {
 	Number int    `json:"number"`
 	Title  string `json:"title"`

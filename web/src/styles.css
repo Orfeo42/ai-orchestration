@@ -1,0 +1,284 @@
+:root {
+  --bg: #0e1014;
+  --panel: #161922;
+  --border: #242a36;
+  --text: #d7dee9;
+  --muted: #8893a6;
+  --accent: #4dabf7;
+  --green: #51cf66;
+  --red: #ff6b6b;
+  --yellow: #ffd43b;
+  --gray: #6c757d;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+}
+
+a {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+a:hover {
+  text-decoration: underline;
+}
+
+.app-shell {
+  display: flex;
+  min-height: 100vh;
+}
+
+.app-nav {
+  width: 200px;
+  background: var(--panel);
+  border-right: 1px solid var(--border);
+  padding: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.brand {
+  font-weight: bold;
+  font-size: 1.1rem;
+  margin-bottom: 1rem;
+}
+
+.app-main {
+  flex: 1;
+  padding: 1.5rem;
+  overflow-y: auto;
+}
+
+.page-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.page-header h2 {
+  margin: 0 0 0.25rem 0;
+}
+
+.meta {
+  display: flex;
+  gap: 0.75rem;
+  color: var(--muted);
+  font-size: 0.85rem;
+  flex-wrap: wrap;
+}
+
+.filters select,
+.inject-form textarea,
+.inject-form button,
+.actions button {
+  background: var(--panel);
+  color: var(--text);
+  border: 1px solid var(--border);
+  padding: 0.4rem 0.6rem;
+  border-radius: 4px;
+}
+
+.filters {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.actions {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.actions button:disabled,
+.inject-form button:disabled {
+  opacity: 0.5;
+}
+
+.ws-on {
+  color: var(--green);
+  font-size: 0.8rem;
+}
+
+.ws-off {
+  color: var(--red);
+  font-size: 0.8rem;
+}
+
+.runs-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+}
+
+.runs-table th,
+.runs-table td {
+  text-align: left;
+  padding: 0.5rem 0.75rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.runs-table th {
+  color: var(--muted);
+  font-weight: 500;
+}
+
+.empty {
+  color: var(--muted);
+  text-align: center;
+  padding: 2rem;
+}
+
+.phase-badge {
+  display: inline-block;
+  padding: 0.15rem 0.5rem;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  background: var(--panel);
+  border: 1px solid var(--border);
+}
+
+.phase-active,
+.phase-implementing,
+.phase-assessing,
+.phase-testing,
+.phase-pushing,
+.phase-pr_description,
+.phase-reviewing {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.phase-done {
+  border-color: var(--green);
+  color: var(--green);
+}
+
+.phase-failed {
+  border-color: var(--red);
+  color: var(--red);
+}
+
+.phase-cancelled {
+  border-color: var(--yellow);
+  color: var(--yellow);
+}
+
+.error {
+  color: var(--red);
+  background: rgba(255, 107, 107, 0.1);
+  padding: 0.5rem 0.75rem;
+  border-radius: 4px;
+  margin-bottom: 1rem;
+}
+
+.action-msg {
+  color: var(--muted);
+  font-size: 0.85rem;
+  margin: 0.5rem 0;
+}
+
+.usage-bar {
+  display: flex;
+  gap: 1.5rem;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  padding: 0.75rem 1rem;
+  border-radius: 6px;
+  margin-bottom: 1rem;
+  font-size: 0.9rem;
+}
+
+.inject-form {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+
+.inject-form textarea {
+  flex: 1;
+  font-family: inherit;
+  resize: vertical;
+}
+
+.event-log {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  max-height: 70vh;
+  overflow-y: auto;
+}
+
+.event {
+  display: grid;
+  grid-template-columns: 90px 130px 1fr;
+  gap: 0.75rem;
+  padding: 0.5rem 0.75rem;
+  border-bottom: 1px solid var(--border);
+  align-items: start;
+  font-size: 0.85rem;
+}
+
+.event:last-child {
+  border-bottom: none;
+}
+
+.event-time {
+  color: var(--muted);
+  font-family: ui-monospace, monospace;
+  font-size: 0.75rem;
+}
+
+.event-kind {
+  color: var(--muted);
+  font-family: ui-monospace, monospace;
+  font-size: 0.75rem;
+}
+
+.event-tool_use .event-kind,
+.event-tool_result .event-kind {
+  color: var(--accent);
+}
+
+.event-result .event-kind {
+  color: var(--green);
+}
+
+.event-error .event-kind,
+.event-cancel .event-kind {
+  color: var(--red);
+}
+
+.event-inject .event-kind {
+  color: var(--yellow);
+}
+
+.event pre {
+  background: var(--bg);
+  padding: 0.5rem;
+  border-radius: 4px;
+  overflow-x: auto;
+  margin: 0.25rem 0 0 0;
+  font-size: 0.75rem;
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+.usage {
+  color: var(--muted);
+  font-family: ui-monospace, monospace;
+  font-size: 0.75rem;
+}

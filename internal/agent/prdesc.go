@@ -4,8 +4,10 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"strings"
 	"time"
 
+	"ai-orchestration/internal/events"
 	"ai-orchestration/internal/models"
 )
 
@@ -26,7 +28,7 @@ func NewPRDescWriter(timeout time.Duration) *ClaudePRDescWriter {
 	return &ClaudePRDescWriter{timeout: timeout}
 }
 
-func (c *ClaudePRDescWriter) Generate(ctx context.Context, issue models.ForgejoIssue, projectPath, _ string) (string, error) {
+func (c *ClaudePRDescWriter) Generate(ctx context.Context, issue models.ForgejoIssue, projectPath, _ string, sink events.Sink) (string, error) {
 	slog.InfoContext(ctx, "generating PR description via claude",
 		"issue", issue.Number,
 		"path", projectPath,
@@ -43,12 +45,12 @@ func (c *ClaudePRDescWriter) Generate(ctx context.Context, issue models.ForgejoI
 		"--output-format", "stream-json",
 		"--verbose",
 		"--allowedTools", "Bash,Read,Glob,Grep",
-	})
+	}, sink)
 	if err != nil {
 		return "", fmt.Errorf("claude pr desc: %w", err)
 	}
-	if out == "" {
+	if out.Result == "" {
 		return "", fmt.Errorf("claude pr desc: empty output")
 	}
-	return out, nil
+	return strings.TrimSpace(out.Result), nil
 }

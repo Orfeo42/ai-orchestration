@@ -3,7 +3,11 @@ package gemini
 import (
 	"context"
 	"errors"
+	"log/slog"
 	"strings"
+	"time"
+
+	"ai-orchestration/internal/events"
 
 	"github.com/google/generative-ai-go/genai"
 	"google.golang.org/api/option"
@@ -26,4 +30,39 @@ func responseText(resp *genai.GenerateContentResponse) (string, error) {
 		}
 	}
 	return sb.String(), nil
+}
+
+func emitUsage(ctx context.Context, sink events.Sink, resp *genai.GenerateContentResponse) {
+	if sink == nil || resp == nil || resp.UsageMetadata == nil {
+		return
+	}
+	usage := events.TokenUsage{
+		Input:          int(resp.UsageMetadata.PromptTokenCount),
+		Output:         int(resp.UsageMetadata.CandidatesTokenCount),
+		CacheReadInput: int(resp.UsageMetadata.CachedContentTokenCount),
+	}
+	if err := sink.Emit(ctx, events.Event{
+		Kind:  events.KindResult,
+		Usage: &usage,
+		At:    time.Now().UTC(),
+	}); err != nil {
+		slog.WarnContext(ctx, "gemini usage sink emit failed",
+			"error", err,
+		)
+	}
+}
+
+func emitText(ctx context.Context, sink events.Sink, text string) {
+	if sink == nil || text == "" {
+		return
+	}
+	if err := sink.Emit(ctx, events.Event{
+		Kind: events.KindAssistant,
+		Text: text,
+		At:   time.Now().UTC(),
+	}); err != nil {
+		slog.WarnContext(ctx, "gemini text sink emit failed",
+			"error", err,
+		)
+	}
 }

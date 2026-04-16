@@ -13,7 +13,7 @@ services:
   orchestrator:
     build:
       context: .
-      dockerfile: Dockerfile.orchestrator
+      dockerfile: cmd/orchestrator/Dockerfile
     restart: unless-stopped
     depends_on:
       redis:
@@ -38,7 +38,7 @@ services:
   reviewer:
     build:
       context: .
-      dockerfile: Dockerfile.reviewer
+      dockerfile: cmd/reviewer/Dockerfile
     restart: unless-stopped
     depends_on:
       redis:
@@ -53,6 +53,21 @@ services:
       TZ: Europe/Rome
     volumes:
       - projects_data:/projects
+
+  webui:
+    build:
+      context: .
+      dockerfile: web/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      redis:
+        condition: service_healthy
+    environment:
+      LISTEN_ADDR: 0.0.0.0:8080
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379}
+      TZ: Europe/Rome
+    ports:
+      - "127.0.0.1:8080:8080"
 
 volumes:
   redis_data:

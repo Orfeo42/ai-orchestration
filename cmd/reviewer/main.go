@@ -1,19 +1,15 @@
 package main
 
 import (
-	"context"
 	"encoding/json"
-	"fmt"
 	"log/slog"
-	"os"
-	"os/exec"
 	"time"
 
 	"ai-orchestration/internal/forgejo"
 	"ai-orchestration/internal/gemini"
 	"ai-orchestration/internal/gitops"
 	"ai-orchestration/internal/models"
-	"ai-orchestration/internal/queue"
+	"ai-orchestration/internal/runtime"
 )
 
 type config struct {
@@ -27,104 +23,80 @@ type config struct {
 
 func loadConfig() config {
 	return config{
-		geminiAPIKey: mustEnv("GEMINI_API_KEY"),
-		redisURL:     envOr("REDIS_URL", "redis://redis:6379"),
-		forgejoURL:   mustEnv("FORGEJO_URL"),
-		forgejoToken: mustEnv("FORGEJO_TOKEN"),
-		gitUserName:  envOr("GIT_USER_NAME", "AI Reviewer"),
-		gitUserEmail: envOr("GIT_USER_EMAIL", "ai-reviewer@orchestrator.local"),
+		geminiAPIKey: runtime.MustEnv("GEMINI_API_KEY"),
+		redisURL:     runtime.EnvOr("REDIS_URL", "redis://redis:6379"),
+		forgejoURL:   runtime.MustEnv("FORGEJO_URL"),
+		forgejoToken: runtime.MustEnv("FORGEJO_TOKEN"),
+		gitUserName:  runtime.EnvOr("GIT_USER_NAME", "AI Reviewer"),
+		gitUserEmail: runtime.EnvOr("GIT_USER_EMAIL", "ai-reviewer@orchestrator.local"),
 	}
-}
-
-func mustEnv(key string) string {
-	v := os.Getenv(key)
-	if v == "" {
-		slog.Error("required env var missing",
-			"key", key,
-		)
-		os.Exit(1)
-	}
-	return v
-}
-
-func envOr(key, def string) string {
-	if v := os.Getenv(key); v != "" {
-		return v
-	}
-	return def
-}
-
-func configureGit(name, email string) error {
-	if err := exec.Command("git", "config", "--global", "user.name", name).Run(); err != nil {
-		return fmt.Errorf("git config user.name: %w", err)
-	}
-	if err := exec.Command("git", "config", "--global", "user.email", email).Run(); err != nil {
-		return fmt.Errorf("git config user.email: %w", err)
-	}
-	return nil
 }
 
 func main() {
-	slog.SetDefault(slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelDebug})))
+	runtime.InitLogger(slog.LevelDebug)
 
 	cfg := loadConfig()
 
-	if err := configureGit(cfg.gitUserName, cfg.gitUserEmail); err != nil {
-		slog.Error("configure git failed",
-			"error", err,
-		)
-		os.Exit(1)
+	if err := runtime.ConfigureGit(cfg.gitUserName, cfg.gitUserEmail); err != nil {
+		runtime.Die("git-config", err)
 	}
 
-	ctx := context.Background()
+	ctx, stop := runtime.ShutdownContext()
+	defer stop()
 
 	reviewer, err := gemini.NewReviewer(ctx, cfg.geminiAPIKey)
 	if err != nil {
-		slog.Error("reviewer init failed",
-			"error", err,
-		)
-		os.Exit(1)
+		runtime.Die("reviewer", err)
 	}
 	defer reviewer.Close()
 
 	docsWriter, err := gemini.NewDocsWriter(ctx, cfg.geminiAPIKey)
 	if err != nil {
-		slog.Error("docs writer init failed",
-			"error", err,
-		)
-		os.Exit(1)
+		runtime.Die("docs-writer", err)
 	}
 	defer docsWriter.Close()
 
 	fj := forgejo.New(cfg.forgejoURL, cfg.forgejoToken)
 
-	rq, err := queue.New(cfg.redisURL)
+	rq, err := runtime.NewQueue(cfg.redisURL)
 	if err != nil {
-		slog.Error("redis connect failed",
-			"error", err,
-		)
-		os.Exit(1)
+		runtime.Die("queue", err)
 	}
-	defer func() {
-		if err := rq.Close(); err != nil {
-			slog.Error("redis queue close failed",
-				"error", err,
-			)
-		}
-	}()
+	defer runtime.CloseAll("queue", rq)
+
+	store, err := runtime.NewStore(cfg.redisURL)
+	if err != nil {
+		runtime.Die("runstore", err)
+	}
+	defer runtime.CloseAll("runstore", store)
+
+	ctrl, err := runtime.NewControl(cfg.redisURL)
+	if err != nil {
+		runtime.Die("control", err)
+	}
+	defer runtime.CloseAll("control", ctrl)
 
 	deps := reviewDeps{
 		reviewer:   reviewer,
 		docsWriter: docsWriter,
 		fj:         fj,
 		gitFactory: gitops.DefaultFactory,
+		store:      store,
+		ctrl:       ctrl,
 	}
 
 	slog.Info("reviewer started")
 
 	for {
+		if ctx.Err() != nil {
+			slog.Info("reviewer shutting down")
+			return
+		}
 		raw, err := rq.Pop(ctx, "queue:review", 10*time.Second)
 		if err != nil {
+			if ctx.Err() != nil {
+				return
+			}
 			slog.Error("queue pop failed",
 				"error", err,
 			)

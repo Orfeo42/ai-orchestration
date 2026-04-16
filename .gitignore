@@ -4,7 +4,7 @@
 *.exe
 
 # env
-.env*
+.env
 
 # VS Code
 .vscode/
@@ -17,3 +17,11 @@ config/claude/.credentials.json
 
 
 .claude/
+
+# Frontend
+web/node_modules/
+cmd/webui/dist/assets/
+cmd/webui/dist/*.js
+cmd/webui/dist/*.css
+cmd/webui/dist/*.svg
+cmd/webui/dist/vite.svg

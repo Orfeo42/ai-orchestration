@@ -4,6 +4,7 @@
 package gemini
 
 import (
+	"ai-orchestration/internal/events"
 	"ai-orchestration/internal/models"
 	"context"
 	"sync"
@@ -19,7 +20,7 @@ var _ Reviewer = &MockReviewer{}
 //
 //		// make and configure a mocked Reviewer
 //		mockedReviewer := &MockReviewer{
-//			ReviewFunc: func(ctx context.Context, job models.ReviewJob) (models.ReviewResult, error) {
+//			ReviewFunc: func(ctx context.Context, job models.ReviewJob, sink events.Sink) (models.ReviewResult, error) {
 //				panic("mock out the Review method")
 //			},
 //		}
@@ -30,7 +31,7 @@ var _ Reviewer = &MockReviewer{}
 //	}
 type MockReviewer struct {
 	// ReviewFunc mocks the Review method.
-	ReviewFunc func(ctx context.Context, job models.ReviewJob) (models.ReviewResult, error)
+	ReviewFunc func(ctx context.Context, job models.ReviewJob, sink events.Sink) (models.ReviewResult, error)
 
 	// calls tracks calls to the methods.
 	calls struct {
@@ -40,27 +41,31 @@ type MockReviewer struct {
 			Ctx context.Context
 			// Job is the job argument value.
 			Job models.ReviewJob
+			// Sink is the sink argument value.
+			Sink events.Sink
 		}
 	}
 	lockReview sync.RWMutex
 }
 
 // Review calls ReviewFunc.
-func (mock *MockReviewer) Review(ctx context.Context, job models.ReviewJob) (models.ReviewResult, error) {
+func (mock *MockReviewer) Review(ctx context.Context, job models.ReviewJob, sink events.Sink) (models.ReviewResult, error) {
 	if mock.ReviewFunc == nil {
 		panic("MockReviewer.ReviewFunc: method is nil but Reviewer.Review was just called")
 	}
 	callInfo := struct {
-		Ctx context.Context
-		Job models.ReviewJob
+		Ctx  context.Context
+		Job  models.ReviewJob
+		Sink events.Sink
 	}{
-		Ctx: ctx,
-		Job: job,
+		Ctx:  ctx,
+		Job:  job,
+		Sink: sink,
 	}
 	mock.lockReview.Lock()
 	mock.calls.Review = append(mock.calls.Review, callInfo)
 	mock.lockReview.Unlock()
-	return mock.ReviewFunc(ctx, job)
+	return mock.ReviewFunc(ctx, job, sink)
 }
 
 // ReviewCalls gets all the calls that were made to Review.
@@ -68,12 +73,14 @@ func (mock *MockReviewer) Review(ctx context.Context, job models.ReviewJob) (mod
 //
 //	len(mockedReviewer.ReviewCalls())
 func (mock *MockReviewer) ReviewCalls() []struct {
-	Ctx context.Context
-	Job models.ReviewJob
+	Ctx  context.Context
+	Job  models.ReviewJob
+	Sink events.Sink
 } {
 	var calls []struct {
-		Ctx context.Context
-		Job models.ReviewJob
+		Ctx  context.Context
+		Job  models.ReviewJob
+		Sink events.Sink
 	}
 	mock.lockReview.RLock()
 	calls = mock.calls.Review
@@ -91,7 +98,7 @@ var _ DocsWriter = &MockDocsWriter{}
 //
 //		// make and configure a mocked DocsWriter
 //		mockedDocsWriter := &MockDocsWriter{
-//			UpdateReadmeFunc: func(ctx context.Context, job models.ReviewJob, review models.ReviewResult) (bool, error) {
+//			UpdateReadmeFunc: func(ctx context.Context, job models.ReviewJob, review models.ReviewResult, sink events.Sink) (bool, error) {
 //				panic("mock out the UpdateReadme method")
 //			},
 //		}
@@ -102,7 +109,7 @@ var _ DocsWriter = &MockDocsWriter{}
 //	}
 type MockDocsWriter struct {
 	// UpdateReadmeFunc mocks the UpdateReadme method.
-	UpdateReadmeFunc func(ctx context.Context, job models.ReviewJob, review models.ReviewResult) (bool, error)
+	UpdateReadmeFunc func(ctx context.Context, job models.ReviewJob, review models.ReviewResult, sink events.Sink) (bool, error)
 
 	// calls tracks calls to the methods.
 	calls struct {
@@ -114,13 +121,15 @@ type MockDocsWriter struct {
 			Job models.ReviewJob
 			// Review is the review argument value.
 			Review models.ReviewResult
+			// Sink is the sink argument value.
+			Sink events.Sink
 		}
 	}
 	lockUpdateReadme sync.RWMutex
 }
 
 // UpdateReadme calls UpdateReadmeFunc.
-func (mock *MockDocsWriter) UpdateReadme(ctx context.Context, job models.ReviewJob, review models.ReviewResult) (bool, error) {
+func (mock *MockDocsWriter) UpdateReadme(ctx context.Context, job models.ReviewJob, review models.ReviewResult, sink events.Sink) (bool, error) {
 	if mock.UpdateReadmeFunc == nil {
 		panic("MockDocsWriter.UpdateReadmeFunc: method is nil but DocsWriter.UpdateReadme was just called")
 	}
@@ -128,15 +137,17 @@ func (mock *MockDocsWriter) UpdateReadme(ctx context.Context, job models.ReviewJ
 		Ctx    context.Context
 		Job    models.ReviewJob
 		Review models.ReviewResult
+		Sink   events.Sink
 	}{
 		Ctx:    ctx,
 		Job:    job,
 		Review: review,
+		Sink:   sink,
 	}
 	mock.lockUpdateReadme.Lock()
 	mock.calls.UpdateReadme = append(mock.calls.UpdateReadme, callInfo)
 	mock.lockUpdateReadme.Unlock()
-	return mock.UpdateReadmeFunc(ctx, job, review)
+	return mock.UpdateReadmeFunc(ctx, job, review, sink)
 }
 
 // UpdateReadmeCalls gets all the calls that were made to UpdateReadme.
@@ -147,11 +158,13 @@ func (mock *MockDocsWriter) UpdateReadmeCalls() []struct {
 	Ctx    context.Context
 	Job    models.ReviewJob
 	Review models.ReviewResult
+	Sink   events.Sink
 } {
 	var calls []struct {
 		Ctx    context.Context
 		Job    models.ReviewJob
 		Review models.ReviewResult
+		Sink   events.Sink
 	}
 	mock.lockUpdateReadme.RLock()
 	calls = mock.calls.UpdateReadme
@@ -169,7 +182,7 @@ var _ PRDescWriter = &MockPRDescWriter{}
 //
 //		// make and configure a mocked PRDescWriter
 //		mockedPRDescWriter := &MockPRDescWriter{
-//			GenerateFunc: func(ctx context.Context, issue models.ForgejoIssue, projectPath string, diff string) (string, error) {
+//			GenerateFunc: func(ctx context.Context, issue models.ForgejoIssue, projectPath string, diff string, sink events.Sink) (string, error) {
 //				panic("mock out the Generate method")
 //			},
 //		}
@@ -180,7 +193,7 @@ var _ PRDescWriter = &MockPRDescWriter{}
 //	}
 type MockPRDescWriter struct {
 	// GenerateFunc mocks the Generate method.
-	GenerateFunc func(ctx context.Context, issue models.ForgejoIssue, projectPath string, diff string) (string, error)
+	GenerateFunc func(ctx context.Context, issue models.ForgejoIssue, projectPath string, diff string, sink events.Sink) (string, error)
 
 	// calls tracks calls to the methods.
 	calls struct {
@@ -194,13 +207,15 @@ type MockPRDescWriter struct {
 			ProjectPath string
 			// Diff is the diff argument value.
 			Diff string
+			// Sink is the sink argument value.
+			Sink events.Sink
 		}
 	}
 	lockGenerate sync.RWMutex
 }
 
 // Generate calls GenerateFunc.
-func (mock *MockPRDescWriter) Generate(ctx context.Context, issue models.ForgejoIssue, projectPath string, diff string) (string, error) {
+func (mock *MockPRDescWriter) Generate(ctx context.Context, issue models.ForgejoIssue, projectPath string, diff string, sink events.Sink) (string, error) {
 	if mock.GenerateFunc == nil {
 		panic("MockPRDescWriter.GenerateFunc: method is nil but PRDescWriter.Generate was just called")
 	}
@@ -209,16 +224,18 @@ func (mock *MockPRDescWriter) Generate(ctx context.Context, issue models.Forgejo
 		Issue       models.ForgejoIssue
 		ProjectPath string
 		Diff        string
+		Sink        events.Sink
 	}{
 		Ctx:         ctx,
 		Issue:       issue,
 		ProjectPath: projectPath,
 		Diff:        diff,
+		Sink:        sink,
 	}
 	mock.lockGenerate.Lock()
 	mock.calls.Generate = append(mock.calls.Generate, callInfo)
 	mock.lockGenerate.Unlock()
-	return mock.GenerateFunc(ctx, issue, projectPath, diff)
+	return mock.GenerateFunc(ctx, issue, projectPath, diff, sink)
 }
 
 // GenerateCalls gets all the calls that were made to Generate.
@@ -230,12 +247,14 @@ func (mock *MockPRDescWriter) GenerateCalls() []struct {
 	Issue       models.ForgejoIssue
 	ProjectPath string
 	Diff        string
+	Sink        events.Sink
 } {
 	var calls []struct {
 		Ctx         context.Context
 		Issue       models.ForgejoIssue
 		ProjectPath string
 		Diff        string
+		Sink        events.Sink
 	}
 	mock.lockGenerate.RLock()
 	calls = mock.calls.Generate

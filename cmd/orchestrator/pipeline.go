@@ -7,13 +7,19 @@ import (
 	"log/slog"
 	"regexp"
 	"strings"
+	"sync"
 	"time"
 
+	"github.com/google/uuid"
+
 	"ai-orchestration/internal/agent"
+	"ai-orchestration/internal/control"
+	"ai-orchestration/internal/events"
 	"ai-orchestration/internal/forgejo"
 	"ai-orchestration/internal/gitops"
 	"ai-orchestration/internal/models"
 	"ai-orchestration/internal/queue"
+	"ai-orchestration/internal/runstore"
 	"ai-orchestration/internal/testrunner"
 )
 
@@ -23,7 +29,7 @@ var (
 )
 
 type prDescWriter interface {
-	Generate(ctx context.Context, issue models.ForgejoIssue, projectPath, diff string) (string, error)
+	Generate(ctx context.Context, issue models.ForgejoIssue, projectPath, diff string, sink events.Sink) (string, error)
 }
 
 type fallbackPRWriter struct {
@@ -31,8 +37,8 @@ type fallbackPRWriter struct {
 	fallback prDescWriter
 }
 
-func (f *fallbackPRWriter) Generate(ctx context.Context, issue models.ForgejoIssue, projectPath, diff string) (string, error) {
-	desc, err := f.primary.Generate(ctx, issue, projectPath, diff)
+func (f *fallbackPRWriter) Generate(ctx context.Context, issue models.ForgejoIssue, projectPath, diff string, sink events.Sink) (string, error) {
+	desc, err := f.primary.Generate(ctx, issue, projectPath, diff, sink)
 	if err == nil {
 		return desc, nil
 	}
@@ -42,7 +48,7 @@ func (f *fallbackPRWriter) Generate(ctx context.Context, issue models.ForgejoIss
 	slog.WarnContext(ctx, "primary pr writer failed, using fallback",
 		"error", err,
 	)
-	return f.fallback.Generate(ctx, issue, projectPath, diff)
+	return f.fallback.Generate(ctx, issue, projectPath, diff, sink)
 }
 
 type orchDeps struct {
@@ -52,6 +58,8 @@ type orchDeps struct {
 	prWriter   prDescWriter
 	gitFactory gitops.Factory
 	runTests   testrunner.Runner
+	store      runstore.Store
+	ctrl       control.Channel
 }
 
 func pollRepo(ctx context.Context, owner, repo string, deps orchDeps, cfg config) {
@@ -76,6 +84,12 @@ func pollRepo(ctx context.Context, owner, repo string, deps orchDeps, cfg config
 			continue
 		}
 		if processed || containsLabel(issue.Labels, forgejo.LabelDone) {
+			continue
+		}
+		if containsLabel(issue.Labels, forgejo.LabelNeedsInfo) {
+			slog.InfoContext(ctx, "issue waiting on author, skipping",
+				"issue", issue.Number,
+			)
 			continue
 		}
 
@@ -110,17 +124,22 @@ func pollRepo(ctx context.Context, owner, repo string, deps orchDeps, cfg config
 			"project", proj.Repo,
 		)
 		procErr := processIssue(ctx, issue, proj, owner, repo, deps, cfg)
-		if procErr != nil && !errors.Is(procErr, errIssueUnclear) {
+
+		if clearErr := deps.rq.ClearInProgress(ctx, key); clearErr != nil {
+			slog.WarnContext(ctx, "clear in-progress failed",
+				"key", key,
+				"error", clearErr,
+			)
+		}
+
+		if procErr != nil {
+			if errors.Is(procErr, errIssueUnclear) {
+				continue
+			}
 			slog.ErrorContext(ctx, "issue processing failed",
 				"issue", issue.Number,
 				"error", procErr,
 			)
-			if clearErr := deps.rq.ClearInProgress(ctx, key); clearErr != nil {
-				slog.ErrorContext(ctx, "clear in-progress failed",
-					"key", key,
-					"error", clearErr,
-				)
-			}
 			if labelID, lerr := deps.fj.GetLabelID(owner, repo, forgejo.LabelInProgress); lerr == nil && labelID != nil {
 				if rerr := deps.fj.RemoveLabel(owner, repo, issue.Number, *labelID); rerr != nil {
 					slog.WarnContext(ctx, "remove in-progress label failed",
@@ -131,12 +150,6 @@ func pollRepo(ctx context.Context, owner, repo string, deps orchDeps, cfg config
 			continue
 		}
 
-		if err := deps.rq.ClearInProgress(ctx, key); err != nil {
-			slog.WarnContext(ctx, "clear in-progress failed",
-				"key", key,
-				"error", err,
-			)
-		}
 		if err := deps.rq.MarkProcessed(ctx, key); err != nil {
 			slog.WarnContext(ctx, "mark processed failed",
 				"key", key,
@@ -156,6 +169,194 @@ func startIssue(ctx context.Context, fj forgejo.Forgejo, owner, repo string, iss
 	}
 }
 
+type runHandle struct {
+	id      string
+	sink    events.Sink
+	store   runstore.Store
+	notesMu sync.Mutex
+	notes   []string
+	cancel  func()
+}
+
+func (h *runHandle) drainNotes() []string {
+	h.notesMu.Lock()
+	defer h.notesMu.Unlock()
+	notes := h.notes
+	h.notes = nil
+	return notes
+}
+
+func (h *runHandle) appendNote(note string) {
+	h.notesMu.Lock()
+	defer h.notesMu.Unlock()
+	h.notes = append(h.notes, note)
+}
+
+func (h *runHandle) emit(ctx context.Context, evt events.Event) {
+	if h.sink == nil {
+		return
+	}
+	if err := h.sink.Emit(ctx, evt); err != nil {
+		slog.WarnContext(ctx, "sink emit failed",
+			"error", err,
+		)
+	}
+}
+
+func (h *runHandle) setPhase(ctx context.Context, phase runstore.Phase) {
+	if h.store != nil {
+		if err := h.store.Update(ctx, h.id, func(r *runstore.Run) {
+			r.Phase = phase
+		}); err != nil {
+			slog.WarnContext(ctx, "update phase failed",
+				"run", h.id,
+				"error", err,
+			)
+		}
+	}
+	h.emit(ctx, events.Event{Kind: events.KindPhase, Phase: string(phase)})
+}
+
+func (h *runHandle) addUsage(ctx context.Context, u events.TokenUsage) {
+	if h.store == nil {
+		return
+	}
+	if err := h.store.Update(ctx, h.id, func(r *runstore.Run) {
+		r.Usage = r.Usage.Add(u)
+	}); err != nil {
+		slog.WarnContext(ctx, "update usage failed",
+			"run", h.id,
+			"error", err,
+		)
+	}
+}
+
+func (h *runHandle) setSession(ctx context.Context, sessionID string) {
+	if h.store == nil || sessionID == "" {
+		return
+	}
+	if err := h.store.Update(ctx, h.id, func(r *runstore.Run) {
+		r.ClaudeSession = sessionID
+	}); err != nil {
+		slog.WarnContext(ctx, "update session failed",
+			"run", h.id,
+			"error", err,
+		)
+	}
+}
+
+func (h *runHandle) setAttempt(ctx context.Context, attempt int) {
+	if h.store == nil {
+		return
+	}
+	if err := h.store.Update(ctx, h.id, func(r *runstore.Run) {
+		r.Attempt = attempt
+	}); err != nil {
+		slog.WarnContext(ctx, "update attempt failed",
+			"run", h.id,
+			"error", err,
+		)
+	}
+}
+
+func startRunHandle(ctx context.Context, deps orchDeps, issue models.ForgejoIssue, proj projectConfig, owner, repo string) (*runHandle, context.Context, context.CancelFunc) {
+	runID := uuid.NewString()
+	h := &runHandle{id: runID, sink: events.NoopSink{}}
+
+	if deps.store != nil {
+		run := runstore.Run{
+			ID:          runID,
+			Service:     runstore.ServiceOrchestrator,
+			RepoOwner:   owner,
+			RepoName:    repo,
+			IssueNumber: issue.Number,
+			Title:       issue.Title,
+			Project:     proj.Repo,
+			Phase:       runstore.PhaseAssessing,
+			StartedAt:   time.Now().UTC(),
+		}
+		if err := deps.store.Create(ctx, run); err != nil {
+			slog.WarnContext(ctx, "create run failed",
+				"error", err,
+			)
+		} else {
+			h.store = deps.store
+			h.sink = deps.store.AppendSink(runID)
+		}
+	}
+
+	runCtx, cancel := context.WithCancel(ctx)
+	h.cancel = cancel
+
+	if deps.ctrl != nil {
+		sub, err := deps.ctrl.Subscribe(runCtx, runID)
+		if err != nil {
+			slog.WarnContext(ctx, "ctrl subscribe failed",
+				"run", runID,
+				"error", err,
+			)
+		} else {
+			go h.handleControl(runCtx, sub)
+		}
+	}
+
+	h.emit(runCtx, events.Event{
+		Kind:    events.KindRunStart,
+		Service: string(runstore.ServiceOrchestrator),
+	})
+
+	return h, runCtx, cancel
+}
+
+func (h *runHandle) handleControl(ctx context.Context, sub control.Subscription) {
+	defer func() {
+		if err := sub.Close(); err != nil {
+			slog.WarnContext(ctx, "ctrl subscription close failed",
+				"run", h.id,
+				"error", err,
+			)
+		}
+	}()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case msg, ok := <-sub.Messages():
+			if !ok {
+				return
+			}
+			switch msg.Type {
+			case control.TypeCancel:
+				h.emit(ctx, events.Event{Kind: events.KindCancel})
+				h.cancel()
+				return
+			case control.TypeInject:
+				h.appendNote(msg.Note)
+				h.emit(ctx, events.Event{Kind: events.KindInject, Text: msg.Note})
+				h.cancel()
+				return
+			}
+		}
+	}
+}
+
+func (h *runHandle) finalize(ctx context.Context, phase runstore.Phase, finalErr error) {
+	if h.store == nil {
+		return
+	}
+	errStr := ""
+	if finalErr != nil {
+		errStr = finalErr.Error()
+	}
+	if err := h.store.Finalize(ctx, h.id, phase, errStr); err != nil {
+		slog.WarnContext(ctx, "finalize run failed",
+			"run", h.id,
+			"error", err,
+		)
+	}
+	h.emit(ctx, events.Event{Kind: events.KindRunEnd, Phase: string(phase)})
+}
+
 func processIssue(
 	ctx context.Context,
 	issue models.ForgejoIssue,
@@ -163,24 +364,53 @@ func processIssue(
 	issueOwner, issueRepo string,
 	deps orchDeps,
 	cfg config,
-) error {
+) (resErr error) {
 	codeOwner, codeName, err := splitRepo(proj.Repo)
 	if err != nil {
 		return err
 	}
 
-	assess, err := deps.claude.AssessIssue(issue, proj.path())
+	handle, runCtx, cancel := startRunHandle(ctx, deps, issue, proj, issueOwner, issueRepo)
+	defer cancel()
+	defer func() {
+		switch {
+		case errors.Is(resErr, errIssueUnclear):
+			handle.finalize(ctx, runstore.PhaseDone, nil)
+		case resErr != nil:
+			handle.finalize(ctx, runstore.PhaseFailed, resErr)
+		default:
+			handle.finalize(ctx, runstore.PhaseDone, nil)
+		}
+	}()
+
+	comments, err := deps.fj.GetComments(issueOwner, issueRepo, issue.Number)
+	if err != nil {
+		slog.WarnContext(ctx, "fetch comments failed, assessing without them",
+			"issue", issue.Number,
+			"error", err,
+		)
+		comments = nil
+	}
+
+	handle.setPhase(runCtx, runstore.PhaseAssessing)
+	assess, err := deps.claude.AssessIssue(runCtx, issue, comments, proj.path(), handle.sink)
 	if err != nil {
 		return fmt.Errorf("assess issue: %w", err)
 	}
-	if !assess.Clear {
-		return handleUnclearIssue(ctx, issue, issueOwner, issueRepo, assess.Questions, deps)
+	handle.addUsage(runCtx, assess.Usage)
+	handle.setSession(runCtx, assess.SessionID)
+
+	if !assess.Assessment.Clear {
+		err := handleUnclearIssue(ctx, issue, issueOwner, issueRepo, assess.Assessment.Questions, deps)
+		return err
 	}
+	sessionID := assess.SessionID
 
 	branch := fmt.Sprintf("feature/%d-%s", issue.Number, branchSlug(issue.Title))
 	var testError *string
 
 	for attempt := range maxAttempts {
+		handle.setAttempt(runCtx, attempt+1)
 		git := deps.gitFactory(proj.path(), cfg.forgejoURL, cfg.forgejoToken, codeOwner, codeName)
 
 		if attempt == 0 {
@@ -197,9 +427,35 @@ func processIssue(
 			)
 		}
 
-		resume := attempt == 0 && containsLabel(issue.Labels, forgejo.LabelInProgress)
-		if _, err := deps.claude.ImplementIssue(issue, proj.path(), testError, resume); err != nil {
+		handle.setPhase(runCtx, runstore.PhaseImplementing)
+		notes := handle.drainNotes()
+		impl, err := deps.claude.ImplementIssue(runCtx, issue, proj.path(), sessionID, withNotes(testError, notes), handle.sink)
+		if err != nil {
+			if pending := handle.drainNotes(); len(pending) > 0 || runCtx.Err() != nil {
+				handle.notesMu.Lock()
+				handle.notes = append(pending, handle.notes...)
+				handle.notesMu.Unlock()
+				if impl.SessionID != "" {
+					sessionID = impl.SessionID
+					handle.setSession(runCtx, sessionID)
+				}
+				handle.addUsage(runCtx, impl.Usage)
+				if ctx.Err() != nil {
+					handle.finalize(ctx, runstore.PhaseCancelled, nil)
+					return nil
+				}
+				slog.InfoContext(ctx, "claude interrupted, resuming with injected notes",
+					"issue", issue.Number,
+				)
+				attempt--
+				continue
+			}
 			return fmt.Errorf("claude impl: %w", err)
+		}
+		handle.addUsage(runCtx, impl.Usage)
+		if impl.SessionID != "" {
+			sessionID = impl.SessionID
+			handle.setSession(runCtx, sessionID)
 		}
 
 		changed, err := git.HasChanges()
@@ -213,6 +469,7 @@ func processIssue(
 			return errNoChanges
 		}
 
+		handle.setPhase(runCtx, runstore.PhaseTesting)
 		ok, tErr := deps.runTests(proj.path())
 		if ok {
 			break
@@ -234,7 +491,22 @@ func processIssue(
 		}
 	}
 
-	return createPRAndQueue(ctx, issue, proj, branch, issueOwner, issueRepo, codeOwner, codeName, deps, cfg)
+	handle.setPhase(runCtx, runstore.PhasePushing)
+	if err := createPRAndQueue(runCtx, issue, proj, branch, issueOwner, issueRepo, codeOwner, codeName, deps, cfg, handle); err != nil {
+		return err
+	}
+	return nil
+}
+
+func withNotes(testError *string, notes []string) *string {
+	if len(notes) == 0 {
+		return testError
+	}
+	combined := "Additional instructions from user:\n" + strings.Join(notes, "\n---\n")
+	if testError != nil {
+		combined += "\n\n" + *testError
+	}
+	return &combined
 }
 
 func handleUnclearIssue(
@@ -282,6 +554,7 @@ func createPRAndQueue(
 	branch, issueOwner, issueRepo, codeOwner, codeName string,
 	deps orchDeps,
 	cfg config,
+	handle *runHandle,
 ) error {
 	git := deps.gitFactory(proj.path(), cfg.forgejoURL, cfg.forgejoToken, codeOwner, codeName)
 
@@ -303,6 +576,14 @@ func createPRAndQueue(
 	if err != nil {
 		return fmt.Errorf("create pr: %w", err)
 	}
+	if handle != nil && handle.store != nil {
+		if uerr := handle.store.Update(ctx, handle.id, func(r *runstore.Run) { r.PRNumber = pr.Number }); uerr != nil {
+			slog.WarnContext(ctx, "update run pr number failed",
+				"run", handle.id,
+				"error", uerr,
+			)
+		}
+	}
 
 	diff, err := deps.fj.GetPRDiff(codeOwner, codeName, pr.Number)
 	if err != nil {
@@ -312,7 +593,14 @@ func createPRAndQueue(
 	}
 
 	if deps.prWriter != nil && diff != "" {
-		desc, err := deps.prWriter.Generate(ctx, issue, proj.path(), diff)
+		if handle != nil {
+			handle.setPhase(ctx, runstore.PhasePRDesc)
+		}
+		sink := events.Sink(events.NoopSink{})
+		if handle != nil && handle.sink != nil {
+			sink = handle.sink
+		}
+		desc, err := deps.prWriter.Generate(ctx, issue, proj.path(), diff, sink)
 		if err != nil {
 			slog.WarnContext(ctx, "pr description generation failed",
 				"error", err,
@@ -341,15 +629,6 @@ func createPRAndQueue(
 			)
 		}
 	}
-
-	/*if err := deps.fj.CreateComment(issueOwner, issueRepo, issue.Number,
-		fmt.Sprintf("PR created: [%s/%s#%d](%s/%s/%s/pulls/%d)",
-			codeOwner, codeName, pr.Number,
-			cfg.forgejoURL, codeOwner, codeName, pr.Number)); err != nil {
-		slog.WarnContext(ctx, "create pr comment failed",
-			"error", err,
-		)
-	}*/
 
 	job := models.ReviewJob{
 		RepoOwner:   codeOwner,

@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"ai-orchestration/internal/events"
 	"ai-orchestration/internal/forgejo"
 	"ai-orchestration/internal/gemini"
 	"ai-orchestration/internal/gitops"
@@ -62,7 +63,7 @@ func TestRunPipeline(t *testing.T) {
 	t.Run("reviewer error propagated", func(t *testing.T) {
 		deps := reviewDeps{
 			reviewer: &gemini.MockReviewer{
-				ReviewFunc: func(ctx context.Context, job models.ReviewJob) (models.ReviewResult, error) {
+				ReviewFunc: func(ctx context.Context, job models.ReviewJob, sink events.Sink) (models.ReviewResult, error) {
 					return models.ReviewResult{}, errors.New("gemini down")
 				},
 			},
@@ -84,12 +85,12 @@ func TestRunPipeline(t *testing.T) {
 		}
 		deps := reviewDeps{
 			reviewer: &gemini.MockReviewer{
-				ReviewFunc: func(ctx context.Context, job models.ReviewJob) (models.ReviewResult, error) {
+				ReviewFunc: func(ctx context.Context, job models.ReviewJob, sink events.Sink) (models.ReviewResult, error) {
 					return models.ReviewResult{Summary: "ok", Approved: true}, nil
 				},
 			},
 			docsWriter: &gemini.MockDocsWriter{
-				UpdateReadmeFunc: func(ctx context.Context, job models.ReviewJob, review models.ReviewResult) (bool, error) {
+				UpdateReadmeFunc: func(ctx context.Context, job models.ReviewJob, review models.ReviewResult, sink events.Sink) (bool, error) {
 					return false, nil
 				},
 			},
@@ -121,12 +122,12 @@ func TestRunPipeline(t *testing.T) {
 		}
 		deps := reviewDeps{
 			reviewer: &gemini.MockReviewer{
-				ReviewFunc: func(ctx context.Context, job models.ReviewJob) (models.ReviewResult, error) {
+				ReviewFunc: func(ctx context.Context, job models.ReviewJob, sink events.Sink) (models.ReviewResult, error) {
 					return models.ReviewResult{Summary: "ok", Approved: true}, nil
 				},
 			},
 			docsWriter: &gemini.MockDocsWriter{
-				UpdateReadmeFunc: func(ctx context.Context, job models.ReviewJob, review models.ReviewResult) (bool, error) {
+				UpdateReadmeFunc: func(ctx context.Context, job models.ReviewJob, review models.ReviewResult, sink events.Sink) (bool, error) {
 					return true, nil
 				},
 			},

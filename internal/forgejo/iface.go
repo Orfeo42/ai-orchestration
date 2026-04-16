@@ -6,6 +6,7 @@ import "ai-orchestration/internal/models"
 
 type Forgejo interface {
 	GetIssues(owner, repo, label string, assignee *string) ([]models.ForgejoIssue, error)
+	GetComments(owner, repo string, issueNumber int) ([]models.IssueComment, error)
 	GetLabelID(owner, repo, name string) (*int, error)
 	AddLabel(owner, repo string, issueNumber, labelID int) error
 	RemoveLabel(owner, repo string, issueNumber, labelID int) error

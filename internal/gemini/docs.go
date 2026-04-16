@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"ai-orchestration/internal/events"
 	"ai-orchestration/internal/models"
 
 	"github.com/google/generative-ai-go/genai"
@@ -43,7 +44,7 @@ func NewDocsWriter(ctx context.Context, apiKey string) (*GeminiDocsWriter, error
 	}, nil
 }
 
-func (d *GeminiDocsWriter) UpdateReadme(ctx context.Context, job models.ReviewJob, review models.ReviewResult) (bool, error) {
+func (d *GeminiDocsWriter) UpdateReadme(ctx context.Context, job models.ReviewJob, review models.ReviewResult, sink events.Sink) (bool, error) {
 	readmePath := filepath.Join(job.ProjectPath, "README.md")
 	existing := ""
 	if data, err := os.ReadFile(readmePath); err == nil {
@@ -63,6 +64,7 @@ func (d *GeminiDocsWriter) UpdateReadme(ctx context.Context, job models.ReviewJo
 	if err != nil {
 		return false, fmt.Errorf("generate content: %w", err)
 	}
+	emitUsage(ctx, sink, resp)
 	newContent, err := responseText(resp)
 	if err != nil {
 		return false, err
