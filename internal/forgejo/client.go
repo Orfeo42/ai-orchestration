@@ -96,8 +96,10 @@ func (c *Client) GetComments(owner, repo string, issueNumber int) ([]models.Issu
 	}
 
 	var raw []struct {
-		Body string `json:"body"`
-		User struct {
+		ID        int64     `json:"id"`
+		Body      string    `json:"body"`
+		UpdatedAt time.Time `json:"updated_at"`
+		User      struct {
 			Login string `json:"login"`
 		} `json:"user"`
 	}
@@ -108,8 +110,10 @@ func (c *Client) GetComments(owner, repo string, issueNumber int) ([]models.Issu
 	comments := make([]models.IssueComment, len(raw))
 	for i, r := range raw {
 		comments[i] = models.IssueComment{
-			Author: r.User.Login,
-			Body:   r.Body,
+			ID:        r.ID,
+			Author:    r.User.Login,
+			Body:      r.Body,
+			UpdatedAt: r.UpdatedAt,
 		}
 	}
 	return comments, nil

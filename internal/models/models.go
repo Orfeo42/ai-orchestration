@@ -1,6 +1,9 @@
 package models
 
-import "strings"
+import (
+	"strings"
+	"time"
+)
 
 type ForgejoIssue struct {
 	ID        int      `json:"id"`
@@ -13,8 +16,10 @@ type ForgejoIssue struct {
 }
 
 type IssueComment struct {
-	Author string `json:"author"`
-	Body   string `json:"body"`
+	ID        int64     `json:"id"`
+	Author    string    `json:"author"`
+	Body      string    `json:"body"`
+	UpdatedAt time.Time `json:"updated_at"`
 }
 
 type ForgejoPR struct {

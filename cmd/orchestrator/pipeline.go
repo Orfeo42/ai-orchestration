@@ -170,13 +170,32 @@ func startIssue(ctx context.Context, fj forgejo.Forgejo, owner, repo string, iss
 }
 
 type runHandle struct {
-	id      string
-	sink    events.Sink
-	store   runstore.Store
-	notesMu sync.Mutex
-	notes   []string
-	ctx     context.Context
-	cancel  context.CancelFunc
+	id           string
+	sink         events.Sink
+	store        runstore.Store
+	notesMu      sync.Mutex
+	notes        []string
+	ctx          context.Context
+	cancel       context.CancelFunc
+	seenComments map[int64]time.Time
+}
+
+func (h *runHandle) markCommentsSeen(comments []models.IssueComment) {
+	for _, c := range comments {
+		h.seenComments[c.ID] = c.UpdatedAt
+	}
+}
+
+func (h *runHandle) freshComments(comments []models.IssueComment) []models.IssueComment {
+	var fresh []models.IssueComment
+	for _, c := range comments {
+		prev, ok := h.seenComments[c.ID]
+		if !ok || c.UpdatedAt.After(prev) {
+			fresh = append(fresh, c)
+		}
+		h.seenComments[c.ID] = c.UpdatedAt
+	}
+	return fresh
 }
 
 func (h *runHandle) drainNotes() []string {
@@ -262,7 +281,7 @@ func (h *runHandle) setAttempt(ctx context.Context, attempt int) {
 
 func startRunHandle(ctx context.Context, deps orchDeps, issue models.ForgejoIssue, proj projectConfig, owner, repo string) *runHandle {
 	runID := uuid.NewString()
-	h := &runHandle{id: runID, sink: events.NoopSink{}}
+	h := &runHandle{id: runID, sink: events.NoopSink{}, seenComments: map[int64]time.Time{}}
 
 	if deps.store != nil {
 		run := runstore.Run{
@@ -403,6 +422,7 @@ func processIssue(
 	}
 	handle.addUsage(runCtx, assess.Usage)
 	handle.setSession(runCtx, assess.SessionID)
+	handle.markCommentsSeen(comments)
 
 	if !assess.Assessment.Clear {
 		err := handleUnclearIssue(ctx, issue, issueOwner, issueRepo, assess.Assessment.Questions, deps)
@@ -433,7 +453,16 @@ func processIssue(
 
 		handle.setPhase(runCtx, runstore.PhaseImplementing)
 		notes := handle.drainNotes()
-		impl, err := deps.claude.ImplementIssue(runCtx, issue, proj.path(), sessionID, withNotes(testError, notes), handle.sink)
+		var freshComments []models.IssueComment
+		if latest, cerr := deps.fj.GetComments(issueOwner, issueRepo, issue.Number); cerr != nil {
+			slog.WarnContext(ctx, "fetch comments for impl failed, skipping delta",
+				"issue", issue.Number,
+				"error", cerr,
+			)
+		} else {
+			freshComments = handle.freshComments(latest)
+		}
+		impl, err := deps.claude.ImplementIssue(runCtx, issue, freshComments, proj.path(), sessionID, withNotes(testError, notes), handle.sink)
 		if err != nil {
 			if pending := handle.drainNotes(); len(pending) > 0 || runCtx.Err() != nil {
 				handle.notesMu.Lock()

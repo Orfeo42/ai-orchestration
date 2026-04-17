@@ -200,12 +200,13 @@ func lastJSONLine(s string) string {
 	return ""
 }
 
-func (a *ClaudeAgent) ImplementIssue(ctx context.Context, issue models.ForgejoIssue, projectPath, sessionID string, testError *string, sink events.Sink) (ImplementResult, error) {
-	prompt := buildPrompt(issue, testError)
+func (a *ClaudeAgent) ImplementIssue(ctx context.Context, issue models.ForgejoIssue, comments []models.IssueComment, projectPath, sessionID string, testError *string, sink events.Sink) (ImplementResult, error) {
+	prompt := buildPrompt(issue, comments, testError)
 	slog.InfoContext(ctx, "running claude agent",
 		"issue", issue.Number,
 		"path", projectPath,
 		"session", sessionID,
+		"comments", len(comments),
 	)
 
 	args := []string{
@@ -293,7 +294,7 @@ func logEvent(line string) {
 	}
 }
 
-func buildPrompt(issue models.ForgejoIssue, testError *string) string {
+func buildPrompt(issue models.ForgejoIssue, freshComments []models.IssueComment, testError *string) string {
 	base := fmt.Sprintf(`Implement the following issue for this project.
 
 Issue #%d: %s
@@ -305,6 +306,13 @@ Requirements:
 - Follow existing code style and conventions in the project
 - Do not add comments, docstrings, or documentation inline
 - Only modify files relevant to the issue`, issue.Number, issue.Title, issue.Body)
+
+	if len(freshComments) > 0 {
+		base += fmt.Sprintf(`
+
+New or edited issue comments since the previous turn (treat as authoritative clarifications that supersede or extend prior context):
+%s`, formatComments(freshComments))
+	}
 
 	if testError != nil {
 		base += fmt.Sprintf(`

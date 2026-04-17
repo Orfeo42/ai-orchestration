@@ -28,5 +28,5 @@ type ImplementResult struct {
 
 type Agent interface {
 	AssessIssue(ctx context.Context, issue models.ForgejoIssue, comments []models.IssueComment, projectPath string, sink events.Sink) (AssessResult, error)
-	ImplementIssue(ctx context.Context, issue models.ForgejoIssue, projectPath, sessionID string, testError *string, sink events.Sink) (ImplementResult, error)
+	ImplementIssue(ctx context.Context, issue models.ForgejoIssue, comments []models.IssueComment, projectPath, sessionID string, testError *string, sink events.Sink) (ImplementResult, error)
 }

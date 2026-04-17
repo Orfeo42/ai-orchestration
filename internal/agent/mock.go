@@ -23,7 +23,7 @@ var _ Agent = &MockAgent{}
 //			AssessIssueFunc: func(ctx context.Context, issue models.ForgejoIssue, comments []models.IssueComment, projectPath string, sink events.Sink) (AssessResult, error) {
 //				panic("mock out the AssessIssue method")
 //			},
-//			ImplementIssueFunc: func(ctx context.Context, issue models.ForgejoIssue, projectPath string, sessionID string, testError *string, sink events.Sink) (ImplementResult, error) {
+//			ImplementIssueFunc: func(ctx context.Context, issue models.ForgejoIssue, comments []models.IssueComment, projectPath string, sessionID string, testError *string, sink events.Sink) (ImplementResult, error) {
 //				panic("mock out the ImplementIssue method")
 //			},
 //		}
@@ -37,7 +37,7 @@ type MockAgent struct {
 	AssessIssueFunc func(ctx context.Context, issue models.ForgejoIssue, comments []models.IssueComment, projectPath string, sink events.Sink) (AssessResult, error)
 
 	// ImplementIssueFunc mocks the ImplementIssue method.
-	ImplementIssueFunc func(ctx context.Context, issue models.ForgejoIssue, projectPath string, sessionID string, testError *string, sink events.Sink) (ImplementResult, error)
+	ImplementIssueFunc func(ctx context.Context, issue models.ForgejoIssue, comments []models.IssueComment, projectPath string, sessionID string, testError *string, sink events.Sink) (ImplementResult, error)
 
 	// calls tracks calls to the methods.
 	calls struct {
@@ -60,6 +60,8 @@ type MockAgent struct {
 			Ctx context.Context
 			// Issue is the issue argument value.
 			Issue models.ForgejoIssue
+			// Comments is the comments argument value.
+			Comments []models.IssueComment
 			// ProjectPath is the projectPath argument value.
 			ProjectPath string
 			// SessionID is the sessionID argument value.
@@ -123,13 +125,14 @@ func (mock *MockAgent) AssessIssueCalls() []struct {
 }
 
 // ImplementIssue calls ImplementIssueFunc.
-func (mock *MockAgent) ImplementIssue(ctx context.Context, issue models.ForgejoIssue, projectPath string, sessionID string, testError *string, sink events.Sink) (ImplementResult, error) {
+func (mock *MockAgent) ImplementIssue(ctx context.Context, issue models.ForgejoIssue, comments []models.IssueComment, projectPath string, sessionID string, testError *string, sink events.Sink) (ImplementResult, error) {
 	if mock.ImplementIssueFunc == nil {
 		panic("MockAgent.ImplementIssueFunc: method is nil but Agent.ImplementIssue was just called")
 	}
 	callInfo := struct {
 		Ctx         context.Context
 		Issue       models.ForgejoIssue
+		Comments    []models.IssueComment
 		ProjectPath string
 		SessionID   string
 		TestError   *string
@@ -137,6 +140,7 @@ func (mock *MockAgent) ImplementIssue(ctx context.Context, issue models.ForgejoI
 	}{
 		Ctx:         ctx,
 		Issue:       issue,
+		Comments:    comments,
 		ProjectPath: projectPath,
 		SessionID:   sessionID,
 		TestError:   testError,
@@ -145,7 +149,7 @@ func (mock *MockAgent) ImplementIssue(ctx context.Context, issue models.ForgejoI
 	mock.lockImplementIssue.Lock()
 	mock.calls.ImplementIssue = append(mock.calls.ImplementIssue, callInfo)
 	mock.lockImplementIssue.Unlock()
-	return mock.ImplementIssueFunc(ctx, issue, projectPath, sessionID, testError, sink)
+	return mock.ImplementIssueFunc(ctx, issue, comments, projectPath, sessionID, testError, sink)
 }
 
 // ImplementIssueCalls gets all the calls that were made to ImplementIssue.
@@ -155,6 +159,7 @@ func (mock *MockAgent) ImplementIssue(ctx context.Context, issue models.ForgejoI
 func (mock *MockAgent) ImplementIssueCalls() []struct {
 	Ctx         context.Context
 	Issue       models.ForgejoIssue
+	Comments    []models.IssueComment
 	ProjectPath string
 	SessionID   string
 	TestError   *string
@@ -163,6 +168,7 @@ func (mock *MockAgent) ImplementIssueCalls() []struct {
 	var calls []struct {
 		Ctx         context.Context
 		Issue       models.ForgejoIssue
+		Comments    []models.IssueComment
 		ProjectPath string
 		SessionID   string
 		TestError   *string

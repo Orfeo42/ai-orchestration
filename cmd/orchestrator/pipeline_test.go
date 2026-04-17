@@ -197,7 +197,7 @@ func TestPollRepo(t *testing.T) {
 			AssessIssueFunc: func(ctx context.Context, issue models.ForgejoIssue, comments []models.IssueComment, projectPath string, sink events.Sink) (agent.AssessResult, error) {
 				return agent.AssessResult{Assessment: agent.Assessment{Clear: false, Questions: "- missing scope"}}, nil
 			},
-			ImplementIssueFunc: func(ctx context.Context, issue models.ForgejoIssue, projectPath, sessionID string, testError *string, sink events.Sink) (agent.ImplementResult, error) {
+			ImplementIssueFunc: func(ctx context.Context, issue models.ForgejoIssue, comments []models.IssueComment, projectPath, sessionID string, testError *string, sink events.Sink) (agent.ImplementResult, error) {
 				t.Fatal("ImplementIssue must not be called when unclear")
 				return agent.ImplementResult{}, nil
 			},
@@ -338,7 +338,7 @@ func TestProcessIssue(t *testing.T) {
 			AssessIssueFunc: func(ctx context.Context, issue models.ForgejoIssue, comments []models.IssueComment, projectPath string, sink events.Sink) (agent.AssessResult, error) {
 				return agent.AssessResult{Assessment: agent.Assessment{Clear: true}}, nil
 			},
-			ImplementIssueFunc: func(ctx context.Context, issue models.ForgejoIssue, projectPath, sessionID string, testError *string, sink events.Sink) (agent.ImplementResult, error) {
+			ImplementIssueFunc: func(ctx context.Context, issue models.ForgejoIssue, comments []models.IssueComment, projectPath, sessionID string, testError *string, sink events.Sink) (agent.ImplementResult, error) {
 				return agent.ImplementResult{}, nil
 			},
 		}
@@ -374,7 +374,7 @@ func TestProcessIssue(t *testing.T) {
 			AssessIssueFunc: func(ctx context.Context, issue models.ForgejoIssue, comments []models.IssueComment, projectPath string, sink events.Sink) (agent.AssessResult, error) {
 				return agent.AssessResult{Assessment: agent.Assessment{Clear: true}}, nil
 			},
-			ImplementIssueFunc: func(ctx context.Context, issue models.ForgejoIssue, projectPath, sessionID string, testError *string, sink events.Sink) (agent.ImplementResult, error) {
+			ImplementIssueFunc: func(ctx context.Context, issue models.ForgejoIssue, comments []models.IssueComment, projectPath, sessionID string, testError *string, sink events.Sink) (agent.ImplementResult, error) {
 				return agent.ImplementResult{}, errors.New("claude failed")
 			},
 		}
@@ -409,7 +409,7 @@ func TestProcessIssue(t *testing.T) {
 			AssessIssueFunc: func(ctx context.Context, issue models.ForgejoIssue, comments []models.IssueComment, projectPath string, sink events.Sink) (agent.AssessResult, error) {
 				return agent.AssessResult{Assessment: agent.Assessment{Clear: false, Questions: "- which thing?\n- acceptance criteria?"}}, nil
 			},
-			ImplementIssueFunc: func(ctx context.Context, issue models.ForgejoIssue, projectPath, sessionID string, testError *string, sink events.Sink) (agent.ImplementResult, error) {
+			ImplementIssueFunc: func(ctx context.Context, issue models.ForgejoIssue, comments []models.IssueComment, projectPath, sessionID string, testError *string, sink events.Sink) (agent.ImplementResult, error) {
 				t.Fatal("ImplementIssue must not be called when assessment is unclear")
 				return agent.ImplementResult{}, nil
 			},
@@ -452,6 +452,165 @@ func TestProcessIssue(t *testing.T) {
 		}
 	})
 
+	t.Run("impl prompt only gets new comments added after assess", func(t *testing.T) {
+		issue := models.ForgejoIssue{Number: 11, Title: "Feature", Body: "Do X", Labels: []string{}}
+		proj := projectConfig{Repo: "owner/app", BaseBranch: "main"}
+
+		t0 := time.Date(2026, 4, 17, 10, 0, 0, 0, time.UTC)
+		atAssess := []models.IssueComment{{ID: 1, Author: "alice", Body: "first", UpdatedAt: t0}}
+		atImpl1 := []models.IssueComment{
+			{ID: 1, Author: "alice", Body: "first", UpdatedAt: t0},
+			{ID: 2, Author: "bob", Body: "added after assess", UpdatedAt: t0.Add(time.Minute)},
+		}
+		atImpl2 := append(atImpl1, models.IssueComment{ID: 3, Author: "carol", Body: "added between attempts", UpdatedAt: t0.Add(2 * time.Minute)})
+		batches := [][]models.IssueComment{atAssess, atImpl1, atImpl2, atImpl2}
+		var getCommentsCalls int
+		fjMock := &forgejo.MockForgejo{
+			GetCommentsFunc: func(owner, repo string, issueNumber int) ([]models.IssueComment, error) {
+				idx := getCommentsCalls
+				getCommentsCalls++
+				if idx >= len(batches) {
+					return batches[len(batches)-1], nil
+				}
+				return batches[idx], nil
+			},
+		}
+
+		var implCommentsSeen [][]models.IssueComment
+		claudeMock := &agent.MockAgent{
+			AssessIssueFunc: func(ctx context.Context, issue models.ForgejoIssue, comments []models.IssueComment, projectPath string, sink events.Sink) (agent.AssessResult, error) {
+				return agent.AssessResult{Assessment: agent.Assessment{Clear: true}}, nil
+			},
+			ImplementIssueFunc: func(ctx context.Context, issue models.ForgejoIssue, comments []models.IssueComment, projectPath, sessionID string, testError *string, sink events.Sink) (agent.ImplementResult, error) {
+				implCommentsSeen = append(implCommentsSeen, comments)
+				return agent.ImplementResult{}, nil
+			},
+		}
+		gitMock := &gitops.MockGit{
+			CheckoutFunc:     func(branch string) error { return nil },
+			CreateBranchFunc: func(branch string) error { return nil },
+			HasChangesFunc:   func() (bool, error) { return true, nil },
+		}
+
+		deps := orchDeps{
+			fj:         fjMock,
+			rq:         &queue.MockQueue{},
+			claude:     claudeMock,
+			gitFactory: func(repoPath, forgejoURL, token, owner, repo string) gitops.Git { return gitMock },
+			runTests:   func(projectPath string) (bool, string) { return false, "test fail" },
+		}
+
+		err := processIssue(context.Background(), issue, proj, "owner", "repo", deps, config{})
+		if err == nil {
+			t.Fatal("expected maxAttempts error, got nil")
+		}
+		if len(implCommentsSeen) < 2 {
+			t.Fatalf("ImplementIssue called %d times, want >= 2", len(implCommentsSeen))
+		}
+		if len(implCommentsSeen[0]) != 1 || implCommentsSeen[0][0].ID != 2 {
+			t.Errorf("attempt 1 fresh = %+v, want only comment ID 2 (added post-assess)", implCommentsSeen[0])
+		}
+		if len(implCommentsSeen[1]) != 1 || implCommentsSeen[1][0].ID != 3 {
+			t.Errorf("attempt 2 fresh = %+v, want only comment ID 3 (added between attempts)", implCommentsSeen[1])
+		}
+	})
+
+	t.Run("edited comment detected via updated_at bump", func(t *testing.T) {
+		issue := models.ForgejoIssue{Number: 12, Title: "Feature", Body: "Do Y", Labels: []string{}}
+		proj := projectConfig{Repo: "owner/app", BaseBranch: "main"}
+
+		t0 := time.Date(2026, 4, 17, 10, 0, 0, 0, time.UTC)
+		atAssess := []models.IssueComment{{ID: 7, Author: "alice", Body: "original", UpdatedAt: t0}}
+		atImpl := []models.IssueComment{{ID: 7, Author: "alice", Body: "edited body", UpdatedAt: t0.Add(time.Minute)}}
+		batches := [][]models.IssueComment{atAssess, atImpl}
+		var getCommentsCalls int
+		fjMock := &forgejo.MockForgejo{
+			GetCommentsFunc: func(owner, repo string, issueNumber int) ([]models.IssueComment, error) {
+				idx := getCommentsCalls
+				getCommentsCalls++
+				if idx >= len(batches) {
+					return batches[len(batches)-1], nil
+				}
+				return batches[idx], nil
+			},
+		}
+
+		var implComments []models.IssueComment
+		claudeMock := &agent.MockAgent{
+			AssessIssueFunc: func(ctx context.Context, issue models.ForgejoIssue, comments []models.IssueComment, projectPath string, sink events.Sink) (agent.AssessResult, error) {
+				return agent.AssessResult{Assessment: agent.Assessment{Clear: true}}, nil
+			},
+			ImplementIssueFunc: func(ctx context.Context, issue models.ForgejoIssue, comments []models.IssueComment, projectPath, sessionID string, testError *string, sink events.Sink) (agent.ImplementResult, error) {
+				implComments = comments
+				return agent.ImplementResult{}, nil
+			},
+		}
+		gitMock := &gitops.MockGit{
+			CheckoutFunc:     func(branch string) error { return nil },
+			CreateBranchFunc: func(branch string) error { return nil },
+			HasChangesFunc:   func() (bool, error) { return false, nil },
+		}
+
+		deps := orchDeps{
+			fj:         fjMock,
+			rq:         &queue.MockQueue{},
+			claude:     claudeMock,
+			gitFactory: func(repoPath, forgejoURL, token, owner, repo string) gitops.Git { return gitMock },
+			runTests:   func(projectPath string) (bool, string) { return true, "" },
+		}
+
+		err := processIssue(context.Background(), issue, proj, "owner", "repo", deps, config{})
+		if !errors.Is(err, errNoChanges) {
+			t.Fatalf("err = %v, want errNoChanges", err)
+		}
+		if len(implComments) != 1 || implComments[0].ID != 7 || implComments[0].Body != "edited body" {
+			t.Errorf("impl fresh = %+v, want edited comment ID 7", implComments)
+		}
+	})
+
+	t.Run("unchanged comments since assess yield no impl delta", func(t *testing.T) {
+		issue := models.ForgejoIssue{Number: 13, Title: "Feature", Body: "Do Z", Labels: []string{}}
+		proj := projectConfig{Repo: "owner/app", BaseBranch: "main"}
+
+		t0 := time.Date(2026, 4, 17, 10, 0, 0, 0, time.UTC)
+		same := []models.IssueComment{{ID: 1, Author: "alice", Body: "only one", UpdatedAt: t0}}
+		fjMock := &forgejo.MockForgejo{
+			GetCommentsFunc: func(owner, repo string, issueNumber int) ([]models.IssueComment, error) { return same, nil },
+		}
+
+		var implComments []models.IssueComment
+		claudeMock := &agent.MockAgent{
+			AssessIssueFunc: func(ctx context.Context, issue models.ForgejoIssue, comments []models.IssueComment, projectPath string, sink events.Sink) (agent.AssessResult, error) {
+				return agent.AssessResult{Assessment: agent.Assessment{Clear: true}}, nil
+			},
+			ImplementIssueFunc: func(ctx context.Context, issue models.ForgejoIssue, comments []models.IssueComment, projectPath, sessionID string, testError *string, sink events.Sink) (agent.ImplementResult, error) {
+				implComments = comments
+				return agent.ImplementResult{}, nil
+			},
+		}
+		gitMock := &gitops.MockGit{
+			CheckoutFunc:     func(branch string) error { return nil },
+			CreateBranchFunc: func(branch string) error { return nil },
+			HasChangesFunc:   func() (bool, error) { return false, nil },
+		}
+
+		deps := orchDeps{
+			fj:         fjMock,
+			rq:         &queue.MockQueue{},
+			claude:     claudeMock,
+			gitFactory: func(repoPath, forgejoURL, token, owner, repo string) gitops.Git { return gitMock },
+			runTests:   func(projectPath string) (bool, string) { return true, "" },
+		}
+
+		err := processIssue(context.Background(), issue, proj, "owner", "repo", deps, config{})
+		if !errors.Is(err, errNoChanges) {
+			t.Fatalf("err = %v, want errNoChanges", err)
+		}
+		if len(implComments) != 0 {
+			t.Errorf("impl fresh = %+v, want empty (assess already saw everything)", implComments)
+		}
+	})
+
 	t.Run("assess error propagated without comment", func(t *testing.T) {
 		issue := models.ForgejoIssue{Number: 8, Title: "Thing", Labels: []string{}}
 		proj := projectConfig{Repo: "owner/app", BaseBranch: "main"}
@@ -460,7 +619,7 @@ func TestProcessIssue(t *testing.T) {
 			AssessIssueFunc: func(ctx context.Context, issue models.ForgejoIssue, comments []models.IssueComment, projectPath string, sink events.Sink) (agent.AssessResult, error) {
 				return agent.AssessResult{}, errors.New("claude timeout")
 			},
-			ImplementIssueFunc: func(ctx context.Context, issue models.ForgejoIssue, projectPath, sessionID string, testError *string, sink events.Sink) (agent.ImplementResult, error) {
+			ImplementIssueFunc: func(ctx context.Context, issue models.ForgejoIssue, comments []models.IssueComment, projectPath, sessionID string, testError *string, sink events.Sink) (agent.ImplementResult, error) {
 				t.Fatal("ImplementIssue must not be called when assess fails")
 				return agent.ImplementResult{}, nil
 			},
