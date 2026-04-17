@@ -27,6 +27,11 @@ const (
 	PhaseCancelled    Phase = "cancelled"
 )
 
+type EventTail struct {
+	Events []events.Event
+	LastID string
+}
+
 func (p Phase) Terminal() bool {
 	switch p {
 	case PhaseDone, PhaseFailed, PhaseCancelled:

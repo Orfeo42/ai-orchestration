@@ -18,22 +18,22 @@ import (
 
 func TestWebSocketHelloAndReplay(t *testing.T) {
 	t.Run("sends hello then replays existing events", func(t *testing.T) {
-		ts, store, _ := newTestServer(t)
+		s := newTestServer(t)
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 
-		require.NoError(t, store.Create(ctx, runstore.Run{
+		require.NoError(t, s.store.Create(ctx, runstore.Run{
 			ID:        "run-ws",
 			Service:   runstore.ServiceOrchestrator,
 			Phase:     runstore.PhaseImplementing,
 			StartedAt: time.Now().UTC(),
 		}))
-		_, err := store.Append(ctx, "run-ws", events.Event{Kind: events.KindAssistant, Text: "first"})
+		_, err := s.store.Append(ctx, "run-ws", events.Event{Kind: events.KindAssistant, Text: "first"})
 		require.NoError(t, err)
-		_, err = store.Append(ctx, "run-ws", events.Event{Kind: events.KindToolUse, ToolName: "Read"})
+		_, err = s.store.Append(ctx, "run-ws", events.Event{Kind: events.KindToolUse, ToolName: "Read"})
 		require.NoError(t, err)
 
-		wsURL := "ws" + strings.TrimPrefix(ts.URL, "http") + "/ws/runs/run-ws"
+		wsURL := "ws" + strings.TrimPrefix(s.ts.URL, "http") + "/ws/runs/run-ws"
 		conn, _, err := websocket.Dial(ctx, wsURL, nil)
 		require.NoError(t, err)
 		defer conn.CloseNow()

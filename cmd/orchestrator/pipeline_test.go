@@ -79,17 +79,17 @@ func TestProjectLabel(t *testing.T) {
 
 func TestSplitRepo(t *testing.T) {
 	t.Run("valid owner/name", func(t *testing.T) {
-		owner, name, err := splitRepo("acme/myrepo")
+		ref, err := splitRepo("acme/myrepo")
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
-		if owner != "acme" || name != "myrepo" {
-			t.Errorf("got %q/%q, want acme/myrepo", owner, name)
+		if ref.Owner != "acme" || ref.Name != "myrepo" {
+			t.Errorf("got %q/%q, want acme/myrepo", ref.Owner, ref.Name)
 		}
 	})
 
 	t.Run("no slash returns error", func(t *testing.T) {
-		_, _, err := splitRepo("noslash")
+		_, err := splitRepo("noslash")
 		if err == nil {
 			t.Error("expected error")
 		}

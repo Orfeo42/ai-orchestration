@@ -31,7 +31,8 @@ type reviewerHandle struct {
 	id     string
 	sink   events.Sink
 	store  runstore.Store
-	cancel func()
+	ctx    context.Context
+	cancel context.CancelFunc
 }
 
 func (h *reviewerHandle) emit(ctx context.Context, evt events.Event) {
@@ -76,7 +77,7 @@ func (h *reviewerHandle) finalize(ctx context.Context, phase runstore.Phase, fin
 	h.emit(ctx, events.Event{Kind: events.KindRunEnd, Phase: string(phase)})
 }
 
-func startReviewerHandle(ctx context.Context, deps reviewDeps, job models.ReviewJob) (*reviewerHandle, context.Context, context.CancelFunc) {
+func startReviewerHandle(ctx context.Context, deps reviewDeps, job models.ReviewJob) *reviewerHandle {
 	runID := uuid.NewString()
 	h := &reviewerHandle{id: runID, sink: events.NoopSink{}}
 
@@ -102,6 +103,7 @@ func startReviewerHandle(ctx context.Context, deps reviewDeps, job models.Review
 	}
 
 	runCtx, cancel := context.WithCancel(ctx)
+	h.ctx = runCtx
 	h.cancel = cancel
 
 	if deps.ctrl != nil {
@@ -145,12 +147,13 @@ func startReviewerHandle(ctx context.Context, deps reviewDeps, job models.Review
 		Service: string(runstore.ServiceReviewer),
 	})
 
-	return h, runCtx, cancel
+	return h
 }
 
 func runPipeline(ctx context.Context, job models.ReviewJob, deps reviewDeps, cfg config) (resErr error) {
-	handle, runCtx, cancel := startReviewerHandle(ctx, deps, job)
-	defer cancel()
+	handle := startReviewerHandle(ctx, deps, job)
+	runCtx := handle.ctx
+	defer handle.cancel()
 	defer func() {
 		switch {
 		case resErr != nil && ctx.Err() != nil:

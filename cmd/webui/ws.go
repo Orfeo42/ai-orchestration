@@ -101,12 +101,12 @@ func (h *apiHandler) wsServe(ctx context.Context, conn *websocket.Conn, runID st
 					return err
 				}
 				if updated.Phase == runstore.PhaseDone || updated.Phase == runstore.PhaseFailed || updated.Phase == runstore.PhaseCancelled {
-					tail, _, terr := h.store.EventsTail(ctx, runID, lastStreamID, time.Second)
+					tail, terr := h.store.EventsTail(ctx, runID, lastStreamID, time.Second)
 					if terr != nil && !errors.Is(terr, context.Canceled) {
 						return terr
 					}
-					for i := range tail {
-						if err := writeFrame(ctx, conn, wsFrame{Type: "event", Event: &tail[i]}); err != nil {
+					for i := range tail.Events {
+						if err := writeFrame(ctx, conn, wsFrame{Type: "event", Event: &tail.Events[i]}); err != nil {
 							return err
 						}
 					}
@@ -117,7 +117,7 @@ func (h *apiHandler) wsServe(ctx context.Context, conn *websocket.Conn, runID st
 		default:
 		}
 
-		tail, newLast, err := h.store.EventsTail(ctx, runID, lastStreamID, wsTailBlock)
+		tail, err := h.store.EventsTail(ctx, runID, lastStreamID, wsTailBlock)
 		if err != nil {
 			if errors.Is(err, context.Canceled) {
 				return err
@@ -128,12 +128,12 @@ func (h *apiHandler) wsServe(ctx context.Context, conn *websocket.Conn, runID st
 			)
 			continue
 		}
-		lastStreamID = newLast
-		for i := range tail {
-			if tail[i].Seq > lastSeq {
-				lastSeq = tail[i].Seq
+		lastStreamID = tail.LastID
+		for i := range tail.Events {
+			if tail.Events[i].Seq > lastSeq {
+				lastSeq = tail.Events[i].Seq
 			}
-			if err := writeFrame(ctx, conn, wsFrame{Type: "event", Event: &tail[i]}); err != nil {
+			if err := writeFrame(ctx, conn, wsFrame{Type: "event", Event: &tail.Events[i]}); err != nil {
 				return err
 			}
 		}

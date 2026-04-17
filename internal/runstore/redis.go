@@ -215,7 +215,7 @@ func (s *RedisStore) EventsRange(ctx context.Context, runID string, sinceSeq int
 	return out, nil
 }
 
-func (s *RedisStore) EventsTail(ctx context.Context, runID, lastStreamID string, block time.Duration) ([]events.Event, string, error) {
+func (s *RedisStore) EventsTail(ctx context.Context, runID, lastStreamID string, block time.Duration) (EventTail, error) {
 	if lastStreamID == "" {
 		lastStreamID = "0"
 	}
@@ -225,13 +225,13 @@ func (s *RedisStore) EventsTail(ctx context.Context, runID, lastStreamID string,
 		Count:   200,
 	}).Result()
 	if errors.Is(err, redis.Nil) {
-		return nil, lastStreamID, nil
+		return EventTail{LastID: lastStreamID}, nil
 	}
 	if err != nil {
-		return nil, lastStreamID, fmt.Errorf("xread: %w", err)
+		return EventTail{LastID: lastStreamID}, fmt.Errorf("xread: %w", err)
 	}
 	if len(res) == 0 {
-		return nil, lastStreamID, nil
+		return EventTail{LastID: lastStreamID}, nil
 	}
 	stream := res[0]
 	out := make([]events.Event, 0, len(stream.Messages))
@@ -249,7 +249,7 @@ func (s *RedisStore) EventsTail(ctx context.Context, runID, lastStreamID string,
 		out = append(out, evt)
 		newLast = msg.ID
 	}
-	return out, newLast, nil
+	return EventTail{Events: out, LastID: newLast}, nil
 }
 
 func decodeMessage(msg redis.XMessage) (events.Event, error) {

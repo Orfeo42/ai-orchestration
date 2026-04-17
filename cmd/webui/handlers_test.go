@@ -19,7 +19,13 @@ import (
 	"ai-orchestration/internal/runstore"
 )
 
-func newTestServer(t *testing.T) (*httptest.Server, *runstore.RedisStore, *control.RedisChannel) {
+type testServer struct {
+	ts    *httptest.Server
+	store *runstore.RedisStore
+	ctrl  *control.RedisChannel
+}
+
+func newTestServer(t *testing.T) testServer {
 	t.Helper()
 	mr := miniredis.RunT(t)
 	client := redis.NewClient(&redis.Options{Addr: mr.Addr()})
@@ -30,13 +36,13 @@ func newTestServer(t *testing.T) (*httptest.Server, *runstore.RedisStore, *contr
 	require.NoError(t, err)
 	ts := httptest.NewServer(srv.srv.Handler)
 	t.Cleanup(ts.Close)
-	return ts, store, ctrl
+	return testServer{ts: ts, store: store, ctrl: ctrl}
 }
 
 func TestListRunsEmpty(t *testing.T) {
 	t.Run("returns empty array", func(t *testing.T) {
-		ts, _, _ := newTestServer(t)
-		resp, err := http.Get(ts.URL + "/api/runs")
+		s := newTestServer(t)
+		resp, err := http.Get(s.ts.URL + "/api/runs")
 		require.NoError(t, err)
 		defer resp.Body.Close()
 		assert.Equal(t, http.StatusOK, resp.StatusCode)
@@ -51,9 +57,9 @@ func TestListRunsEmpty(t *testing.T) {
 
 func TestListRunsAfterCreate(t *testing.T) {
 	t.Run("created run appears in list", func(t *testing.T) {
-		ts, store, _ := newTestServer(t)
+		s := newTestServer(t)
 		ctx := context.Background()
-		require.NoError(t, store.Create(ctx, runstore.Run{
+		require.NoError(t, s.store.Create(ctx, runstore.Run{
 			ID:        "r1",
 			Service:   runstore.ServiceOrchestrator,
 			RepoOwner: "acme",
@@ -62,7 +68,7 @@ func TestListRunsAfterCreate(t *testing.T) {
 			StartedAt: time.Now().UTC(),
 		}))
 
-		resp, err := http.Get(ts.URL + "/api/runs")
+		resp, err := http.Get(s.ts.URL + "/api/runs")
 		require.NoError(t, err)
 		defer resp.Body.Close()
 		assert.Equal(t, http.StatusOK, resp.StatusCode)
@@ -78,8 +84,8 @@ func TestListRunsAfterCreate(t *testing.T) {
 
 func TestGetRunNotFound(t *testing.T) {
 	t.Run("returns 404 for missing run", func(t *testing.T) {
-		ts, _, _ := newTestServer(t)
-		resp, err := http.Get(ts.URL + "/api/runs/missing")
+		s := newTestServer(t)
+		resp, err := http.Get(s.ts.URL + "/api/runs/missing")
 		require.NoError(t, err)
 		defer resp.Body.Close()
 		assert.Equal(t, http.StatusNotFound, resp.StatusCode)
@@ -88,13 +94,13 @@ func TestGetRunNotFound(t *testing.T) {
 
 func TestGetRunEvents(t *testing.T) {
 	t.Run("returns appended events", func(t *testing.T) {
-		ts, store, _ := newTestServer(t)
+		s := newTestServer(t)
 		ctx := context.Background()
-		require.NoError(t, store.Create(ctx, runstore.Run{ID: "r2", StartedAt: time.Now().UTC()}))
-		_, err := store.Append(ctx, "r2", events.Event{Kind: events.KindAssistant, Text: "hi"})
+		require.NoError(t, s.store.Create(ctx, runstore.Run{ID: "r2", StartedAt: time.Now().UTC()}))
+		_, err := s.store.Append(ctx, "r2", events.Event{Kind: events.KindAssistant, Text: "hi"})
 		require.NoError(t, err)
 
-		resp, err := http.Get(ts.URL + "/api/runs/r2/events")
+		resp, err := http.Get(s.ts.URL + "/api/runs/r2/events")
 		require.NoError(t, err)
 		defer resp.Body.Close()
 		assert.Equal(t, http.StatusOK, resp.StatusCode)
@@ -110,14 +116,14 @@ func TestGetRunEvents(t *testing.T) {
 
 func TestCancelEndpoint(t *testing.T) {
 	t.Run("publishes cancel ctrl message", func(t *testing.T) {
-		ts, _, ctrl := newTestServer(t)
+		s := newTestServer(t)
 		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 		defer cancel()
-		sub, err := ctrl.Subscribe(ctx, "r3")
+		sub, err := s.ctrl.Subscribe(ctx, "r3")
 		require.NoError(t, err)
 		defer sub.Close()
 
-		resp, err := http.Post(ts.URL+"/api/runs/r3/cancel", "application/json", nil)
+		resp, err := http.Post(s.ts.URL+"/api/runs/r3/cancel", "application/json", nil)
 		require.NoError(t, err)
 		defer resp.Body.Close()
 		assert.Equal(t, http.StatusNoContent, resp.StatusCode)
@@ -133,17 +139,17 @@ func TestCancelEndpoint(t *testing.T) {
 
 func TestInjectEndpoint(t *testing.T) {
 	t.Run("publishes inject ctrl message and persists note", func(t *testing.T) {
-		ts, store, ctrl := newTestServer(t)
+		s := newTestServer(t)
 		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 		defer cancel()
-		require.NoError(t, store.Create(ctx, runstore.Run{ID: "r4", StartedAt: time.Now().UTC()}))
+		require.NoError(t, s.store.Create(ctx, runstore.Run{ID: "r4", StartedAt: time.Now().UTC()}))
 
-		sub, err := ctrl.Subscribe(ctx, "r4")
+		sub, err := s.ctrl.Subscribe(ctx, "r4")
 		require.NoError(t, err)
 		defer sub.Close()
 
 		body := strings.NewReader(`{"note":"also update README"}`)
-		resp, err := http.Post(ts.URL+"/api/runs/r4/inject", "application/json", body)
+		resp, err := http.Post(s.ts.URL+"/api/runs/r4/inject", "application/json", body)
 		require.NoError(t, err)
 		defer resp.Body.Close()
 		assert.Equal(t, http.StatusNoContent, resp.StatusCode)
@@ -156,7 +162,7 @@ func TestInjectEndpoint(t *testing.T) {
 			t.Fatal("timeout waiting for inject ctrl msg")
 		}
 
-		got, err := store.Get(ctx, "r4")
+		got, err := s.store.Get(ctx, "r4")
 		require.NoError(t, err)
 		assert.Contains(t, got.InjectNotes, "also update README")
 	})
@@ -164,8 +170,8 @@ func TestInjectEndpoint(t *testing.T) {
 
 func TestHealthz(t *testing.T) {
 	t.Run("returns ok", func(t *testing.T) {
-		ts, _, _ := newTestServer(t)
-		resp, err := http.Get(ts.URL + "/healthz")
+		s := newTestServer(t)
+		resp, err := http.Get(s.ts.URL + "/healthz")
 		require.NoError(t, err)
 		defer resp.Body.Close()
 		assert.Equal(t, http.StatusOK, resp.StatusCode)
@@ -174,8 +180,8 @@ func TestHealthz(t *testing.T) {
 
 func TestStaticFallback(t *testing.T) {
 	t.Run("unknown route serves index.html", func(t *testing.T) {
-		ts, _, _ := newTestServer(t)
-		resp, err := http.Get(ts.URL + "/some/spa/route")
+		s := newTestServer(t)
+		resp, err := http.Get(s.ts.URL + "/some/spa/route")
 		require.NoError(t, err)
 		defer resp.Body.Close()
 		assert.Equal(t, http.StatusOK, resp.StatusCode)

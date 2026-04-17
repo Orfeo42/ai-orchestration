@@ -17,7 +17,7 @@ type Store interface {
 
 	Append(ctx context.Context, runID string, evt events.Event) (events.Event, error)
 	EventsRange(ctx context.Context, runID string, sinceSeq int64, limit int) ([]events.Event, error)
-	EventsTail(ctx context.Context, runID string, lastStreamID string, block time.Duration) ([]events.Event, string, error)
+	EventsTail(ctx context.Context, runID string, lastStreamID string, block time.Duration) (EventTail, error)
 
 	List(ctx context.Context, filter ListFilter) ([]Run, error)
 	Active(ctx context.Context) ([]Run, error)

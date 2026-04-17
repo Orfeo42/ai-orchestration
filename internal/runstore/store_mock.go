@@ -41,7 +41,7 @@ var _ Store = &MockStore{}
 //			EventsRangeFunc: func(ctx context.Context, runID string, sinceSeq int64, limit int) ([]events.Event, error) {
 //				panic("mock out the EventsRange method")
 //			},
-//			EventsTailFunc: func(ctx context.Context, runID string, lastStreamID string, block time.Duration) ([]events.Event, string, error) {
+//			EventsTailFunc: func(ctx context.Context, runID string, lastStreamID string, block time.Duration) (EventTail, error) {
 //				panic("mock out the EventsTail method")
 //			},
 //			FinalizeFunc: func(ctx context.Context, id string, phase Phase, errStr string) error {
@@ -85,7 +85,7 @@ type MockStore struct {
 	EventsRangeFunc func(ctx context.Context, runID string, sinceSeq int64, limit int) ([]events.Event, error)
 
 	// EventsTailFunc mocks the EventsTail method.
-	EventsTailFunc func(ctx context.Context, runID string, lastStreamID string, block time.Duration) ([]events.Event, string, error)
+	EventsTailFunc func(ctx context.Context, runID string, lastStreamID string, block time.Duration) (EventTail, error)
 
 	// FinalizeFunc mocks the Finalize method.
 	FinalizeFunc func(ctx context.Context, id string, phase Phase, errStr string) error
@@ -462,7 +462,7 @@ func (mock *MockStore) EventsRangeCalls() []struct {
 }
 
 // EventsTail calls EventsTailFunc.
-func (mock *MockStore) EventsTail(ctx context.Context, runID string, lastStreamID string, block time.Duration) ([]events.Event, string, error) {
+func (mock *MockStore) EventsTail(ctx context.Context, runID string, lastStreamID string, block time.Duration) (EventTail, error) {
 	if mock.EventsTailFunc == nil {
 		panic("MockStore.EventsTailFunc: method is nil but Store.EventsTail was just called")
 	}

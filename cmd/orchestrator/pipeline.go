@@ -175,7 +175,8 @@ type runHandle struct {
 	store   runstore.Store
 	notesMu sync.Mutex
 	notes   []string
-	cancel  func()
+	ctx     context.Context
+	cancel  context.CancelFunc
 }
 
 func (h *runHandle) drainNotes() []string {
@@ -259,7 +260,7 @@ func (h *runHandle) setAttempt(ctx context.Context, attempt int) {
 	}
 }
 
-func startRunHandle(ctx context.Context, deps orchDeps, issue models.ForgejoIssue, proj projectConfig, owner, repo string) (*runHandle, context.Context, context.CancelFunc) {
+func startRunHandle(ctx context.Context, deps orchDeps, issue models.ForgejoIssue, proj projectConfig, owner, repo string) *runHandle {
 	runID := uuid.NewString()
 	h := &runHandle{id: runID, sink: events.NoopSink{}}
 
@@ -286,6 +287,7 @@ func startRunHandle(ctx context.Context, deps orchDeps, issue models.ForgejoIssu
 	}
 
 	runCtx, cancel := context.WithCancel(ctx)
+	h.ctx = runCtx
 	h.cancel = cancel
 
 	if deps.ctrl != nil {
@@ -305,7 +307,7 @@ func startRunHandle(ctx context.Context, deps orchDeps, issue models.ForgejoIssu
 		Service: string(runstore.ServiceOrchestrator),
 	})
 
-	return h, runCtx, cancel
+	return h
 }
 
 func (h *runHandle) handleControl(ctx context.Context, sub control.Subscription) {
@@ -365,13 +367,15 @@ func processIssue(
 	deps orchDeps,
 	cfg config,
 ) (resErr error) {
-	codeOwner, codeName, err := splitRepo(proj.Repo)
+	code, err := splitRepo(proj.Repo)
 	if err != nil {
 		return err
 	}
+	codeOwner, codeName := code.Owner, code.Name
 
-	handle, runCtx, cancel := startRunHandle(ctx, deps, issue, proj, issueOwner, issueRepo)
-	defer cancel()
+	handle := startRunHandle(ctx, deps, issue, proj, issueOwner, issueRepo)
+	runCtx := handle.ctx
+	defer handle.cancel()
 	defer func() {
 		switch {
 		case errors.Is(resErr, errIssueUnclear):
@@ -686,10 +690,15 @@ func projectLabel(labels []string) string {
 	return ""
 }
 
-func splitRepo(repo string) (string, string, error) {
+type repoRef struct {
+	Owner string
+	Name  string
+}
+
+func splitRepo(repo string) (repoRef, error) {
 	parts := strings.SplitN(repo, "/", 2)
 	if len(parts) != 2 {
-		return "", "", fmt.Errorf("invalid repo %q", repo)
+		return repoRef{}, fmt.Errorf("invalid repo %q", repo)
 	}
-	return parts[0], parts[1], nil
+	return repoRef{Owner: parts[0], Name: parts[1]}, nil
 }
