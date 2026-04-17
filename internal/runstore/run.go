@@ -11,6 +11,9 @@ type Service string
 const (
 	ServiceOrchestrator Service = "orchestrator"
 	ServiceReviewer     Service = "reviewer"
+	ServiceAssess       Service = "assess"
+	ServiceImpl         Service = "impl"
+	ServiceReview       Service = "review"
 )
 
 type Phase string

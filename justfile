@@ -62,25 +62,37 @@ logs service="":
 webui-restart:
     docker compose up --build -d webui
 
-# rebuild + restart orchestrator only
-orch-restart:
-    docker compose up --build -d orchestrator
+# rebuild + restart producer only
+producer-restart:
+    docker compose up --build -d producer
 
-# rebuild + restart reviewer only
-reviewer-restart:
-    docker compose up --build -d reviewer
+# rebuild + restart every consumer
+consumer-restart:
+    docker compose up --build -d assess-consumer impl-consumer review-consumer
+
+# scale impl-consumer to N replicas
+scale-impl n="1":
+    docker compose up -d --scale impl-consumer={{n}} impl-consumer
 
 # run webui locally against local redis
 run-webui:
     LISTEN_ADDR=127.0.0.1:8080 REDIS_URL="${REDIS_URL:-redis://127.0.0.1:6379}" go run ./cmd/webui
 
-# run orchestrator locally
-run-orch:
-    REDIS_URL="${REDIS_URL:-redis://127.0.0.1:6379}" go run ./cmd/orchestrator
+# run producer locally
+run-producer:
+    REDIS_URL="${REDIS_URL:-redis://127.0.0.1:6379}" go run ./cmd/producer
 
-# run reviewer locally
-run-reviewer:
-    REDIS_URL="${REDIS_URL:-redis://127.0.0.1:6379}" go run ./cmd/reviewer
+# run assess consumer locally
+run-assess-consumer:
+    REDIS_URL="${REDIS_URL:-redis://127.0.0.1:6379}" go run ./cmd/consumer --pipeline=assess
+
+# run impl consumer locally
+run-impl-consumer:
+    REDIS_URL="${REDIS_URL:-redis://127.0.0.1:6379}" go run ./cmd/consumer --pipeline=impl
+
+# run review consumer locally
+run-review-consumer:
+    REDIS_URL="${REDIS_URL:-redis://127.0.0.1:6379}" go run ./cmd/consumer --pipeline=review
 
 # clean build artifacts (keeps dist/index.html placeholder for go:embed)
 clean:

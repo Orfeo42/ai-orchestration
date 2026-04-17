@@ -10,10 +10,10 @@ services:
       timeout: 3s
       retries: 5
 
-  orchestrator:
+  producer:
     build:
       context: .
-      dockerfile: cmd/orchestrator/Dockerfile
+      dockerfile: cmd/producer/Dockerfile
     restart: unless-stopped
     depends_on:
       redis:
@@ -25,6 +25,46 @@ services:
       FORGEJO_ASSIGNEE: ${FORGEJO_ASSIGNEE:-}
       REDIS_URL: ${REDIS_URL:-redis://redis:6379}
       POLL_INTERVAL: ${POLL_INTERVAL:-60}
+      PROJECTS_CONFIG: /config/projects.json
+      TZ: Europe/Rome
+    volumes:
+      - ${PROJECTS_CONFIG_PATH:-./projects.json}:/config/projects.json:ro
+
+  assess-consumer:
+    build:
+      context: .
+      dockerfile: cmd/consumer/Dockerfile
+    command: ["--pipeline=assess"]
+    restart: unless-stopped
+    depends_on:
+      redis:
+        condition: service_healthy
+    environment:
+      FORGEJO_URL: ${FORGEJO_URL}
+      FORGEJO_TOKEN: ${FORGEJO_TOKEN}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379}
+      CLAUDE_TIMEOUT: ${CLAUDE_TIMEOUT:-3600}
+      GIT_USER_NAME: ${GIT_USER_NAME:-AI Orchestrator}
+      GIT_USER_EMAIL: ${GIT_USER_EMAIL:-ai@orchestrator.local}
+      PROJECTS_CONFIG: /config/projects.json
+      TZ: Europe/Rome
+    volumes:
+      - ${PROJECTS_CONFIG_PATH:-./projects.json}:/config/projects.json:ro
+      - projects_data:/projects
+
+  impl-consumer:
+    build:
+      context: .
+      dockerfile: cmd/consumer/Dockerfile
+    command: ["--pipeline=impl"]
+    restart: unless-stopped
+    depends_on:
+      redis:
+        condition: service_healthy
+    environment:
+      FORGEJO_URL: ${FORGEJO_URL}
+      FORGEJO_TOKEN: ${FORGEJO_TOKEN}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379}
       CLAUDE_TIMEOUT: ${CLAUDE_TIMEOUT:-3600}
       GIT_USER_NAME: ${GIT_USER_NAME:-AI Orchestrator}
       GIT_USER_EMAIL: ${GIT_USER_EMAIL:-ai@orchestrator.local}
@@ -35,10 +75,11 @@ services:
       - ${PROJECTS_CONFIG_PATH:-./projects.json}:/config/projects.json:ro
       - projects_data:/projects
 
-  reviewer:
+  review-consumer:
     build:
       context: .
-      dockerfile: cmd/reviewer/Dockerfile
+      dockerfile: cmd/consumer/Dockerfile
+    command: ["--pipeline=review"]
     restart: unless-stopped
     depends_on:
       redis:
@@ -46,12 +87,14 @@ services:
     environment:
       FORGEJO_URL: ${FORGEJO_URL}
       FORGEJO_TOKEN: ${FORGEJO_TOKEN}
-      GEMINI_API_KEY: ${GEMINI_API_KEY}
       REDIS_URL: ${REDIS_URL:-redis://redis:6379}
+      GEMINI_API_KEY: ${GEMINI_API_KEY}
       GIT_USER_NAME: ${GIT_USER_NAME:-AI Reviewer}
       GIT_USER_EMAIL: ${GIT_USER_EMAIL:-ai-reviewer@orchestrator.local}
+      PROJECTS_CONFIG: /config/projects.json
       TZ: Europe/Rome
     volumes:
+      - ${PROJECTS_CONFIG_PATH:-./projects.json}:/config/projects.json:ro
       - projects_data:/projects
 
   webui:

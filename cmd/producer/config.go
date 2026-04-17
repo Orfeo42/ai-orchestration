@@ -18,21 +18,12 @@ type config struct {
 	redisURL        string
 	projects        map[string]projectConfig
 	pollInterval    time.Duration
-	claudeTimeout   time.Duration
-	gitUserName     string
-	gitUserEmail    string
-	geminiAPIKey    *string
 }
 
 type projectConfig struct {
 	Repo       string `json:"repo"`
 	BaseBranch string `json:"base_branch"`
 }
-
-const (
-	projectsRoot = "/projects"
-	maxAttempts  = 3
-)
 
 func loadConfig() (config, error) {
 	var cfg config
@@ -46,23 +37,12 @@ func loadConfig() (config, error) {
 		cfg.forgejoAssignee = &v
 	}
 	cfg.redisURL = envOr("REDIS_URL", "redis://redis:6379")
-	cfg.gitUserName = envOr("GIT_USER_NAME", "AI Orchestrator")
-	cfg.gitUserEmail = envOr("GIT_USER_EMAIL", "ai@orchestrator.local")
-	if v := os.Getenv("GEMINI_API_KEY"); v != "" {
-		cfg.geminiAPIKey = &v
-	}
 
 	pollSecs, err := strconv.Atoi(envOr("POLL_INTERVAL", "60"))
 	if err != nil {
 		return cfg, fmt.Errorf("POLL_INTERVAL: %w", err)
 	}
 	cfg.pollInterval = time.Duration(pollSecs) * time.Second
-
-	claudeSecs, err := strconv.Atoi(envOr("CLAUDE_TIMEOUT", "3600"))
-	if err != nil {
-		return cfg, fmt.Errorf("CLAUDE_TIMEOUT: %w", err)
-	}
-	cfg.claudeTimeout = time.Duration(claudeSecs) * time.Second
 
 	cfgPath := envOr("PROJECTS_CONFIG", "/config/projects.json")
 	data, err := os.ReadFile(cfgPath)
@@ -73,14 +53,6 @@ func loadConfig() (config, error) {
 		return cfg, fmt.Errorf("parse projects config: %w", err)
 	}
 	return cfg, nil
-}
-
-func (p projectConfig) path() string {
-	parts := strings.SplitN(p.Repo, "/", 2)
-	if len(parts) == 2 {
-		return projectsRoot + "/" + parts[1]
-	}
-	return projectsRoot + "/" + p.Repo
 }
 
 func mustEnv(key string) string {

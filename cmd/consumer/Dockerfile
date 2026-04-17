@@ -3,8 +3,7 @@ WORKDIR /build
 COPY go.mod ./
 RUN go mod tidy
 COPY . .
-RUN CGO_ENABLED=0 go build -gcflags="all=-N -l" -o /orchestrator ./cmd/orchestrator
-RUN go install github.com/go-delve/delve/cmd/dlv@latest
+RUN CGO_ENABLED=0 go build -o /consumer ./cmd/consumer
 
 FROM golang:1.26-bookworm
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -30,9 +29,7 @@ RUN git clone --depth 1 https://github.com/JuliusBrussee/caveman.git \
 
 RUN mkdir -p /projects && chown app:app /projects
 
-COPY --from=builder /orchestrator /usr/local/bin/orchestrator
-COPY --from=builder /go/bin/dlv /usr/local/bin/dlv
+COPY --from=builder /consumer /usr/local/bin/consumer
 
 USER app
-EXPOSE 2345
-CMD ["dlv", "--listen=:2345", "--headless=true", "--api-version=2", "--accept-multiclient", "--continue", "--log", "exec", "/usr/local/bin/orchestrator"]
+ENTRYPOINT ["/usr/local/bin/consumer"]

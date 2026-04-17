@@ -28,6 +28,25 @@ type ForgejoPR struct {
 	Body   string `json:"body"`
 }
 
+type AssessJob struct {
+	RepoOwner   string   `json:"repo_owner"`
+	RepoName    string   `json:"repo_name"`
+	IssueNumber int      `json:"issue_number"`
+	IssueTitle  string   `json:"issue_title"`
+	IssueBody   string   `json:"issue_body"`
+	Project     string   `json:"project"`
+	Labels      []string `json:"labels,omitempty"`
+}
+
+type ImplJob struct {
+	RepoOwner   string `json:"repo_owner"`
+	RepoName    string `json:"repo_name"`
+	IssueNumber int    `json:"issue_number"`
+	IssueTitle  string `json:"issue_title"`
+	IssueBody   string `json:"issue_body"`
+	Project     string `json:"project"`
+}
+
 type ReviewJob struct {
 	RepoOwner   string `json:"repo_owner"`
 	RepoName    string `json:"repo_name"`

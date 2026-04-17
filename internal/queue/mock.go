@@ -22,6 +22,9 @@ var _ Queue = &MockQueue{}
 //			ClearInProgressFunc: func(ctx context.Context, key string) error {
 //				panic("mock out the ClearInProgress method")
 //			},
+//			IsInProgressFunc: func(ctx context.Context, key string) (bool, error) {
+//				panic("mock out the IsInProgress method")
+//			},
 //			IsProcessedFunc: func(ctx context.Context, key string) (bool, error) {
 //				panic("mock out the IsProcessed method")
 //			},
@@ -47,6 +50,9 @@ type MockQueue struct {
 	// ClearInProgressFunc mocks the ClearInProgress method.
 	ClearInProgressFunc func(ctx context.Context, key string) error
 
+	// IsInProgressFunc mocks the IsInProgress method.
+	IsInProgressFunc func(ctx context.Context, key string) (bool, error)
+
 	// IsProcessedFunc mocks the IsProcessed method.
 	IsProcessedFunc func(ctx context.Context, key string) (bool, error)
 
@@ -66,6 +72,13 @@ type MockQueue struct {
 	calls struct {
 		// ClearInProgress holds details about calls to the ClearInProgress method.
 		ClearInProgress []struct {
+			// Ctx is the ctx argument value.
+			Ctx context.Context
+			// Key is the key argument value.
+			Key string
+		}
+		// IsInProgress holds details about calls to the IsInProgress method.
+		IsInProgress []struct {
 			// Ctx is the ctx argument value.
 			Ctx context.Context
 			// Key is the key argument value.
@@ -114,6 +127,7 @@ type MockQueue struct {
 		}
 	}
 	lockClearInProgress sync.RWMutex
+	lockIsInProgress    sync.RWMutex
 	lockIsProcessed     sync.RWMutex
 	lockMarkInProgress  sync.RWMutex
 	lockMarkProcessed   sync.RWMutex
@@ -154,6 +168,42 @@ func (mock *MockQueue) ClearInProgressCalls() []struct {
 	mock.lockClearInProgress.RLock()
 	calls = mock.calls.ClearInProgress
 	mock.lockClearInProgress.RUnlock()
+	return calls
+}
+
+// IsInProgress calls IsInProgressFunc.
+func (mock *MockQueue) IsInProgress(ctx context.Context, key string) (bool, error) {
+	if mock.IsInProgressFunc == nil {
+		panic("MockQueue.IsInProgressFunc: method is nil but Queue.IsInProgress was just called")
+	}
+	callInfo := struct {
+		Ctx context.Context
+		Key string
+	}{
+		Ctx: ctx,
+		Key: key,
+	}
+	mock.lockIsInProgress.Lock()
+	mock.calls.IsInProgress = append(mock.calls.IsInProgress, callInfo)
+	mock.lockIsInProgress.Unlock()
+	return mock.IsInProgressFunc(ctx, key)
+}
+
+// IsInProgressCalls gets all the calls that were made to IsInProgress.
+// Check the length with:
+//
+//	len(mockedQueue.IsInProgressCalls())
+func (mock *MockQueue) IsInProgressCalls() []struct {
+	Ctx context.Context
+	Key string
+} {
+	var calls []struct {
+		Ctx context.Context
+		Key string
+	}
+	mock.lockIsInProgress.RLock()
+	calls = mock.calls.IsInProgress
+	mock.lockIsInProgress.RUnlock()
 	return calls
 }
 
