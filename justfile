@@ -39,11 +39,8 @@ build: web go-build
 check: go-vet go-test
 
 # build + run ALL services detached (frontend built inside web/Dockerfile)
-up:
+build-up:
     docker compose up --build -d
-
-# alias of up
-deploy: up
 
 # docker compose up without rebuild
 start:
@@ -89,6 +86,3 @@ run-reviewer:
 clean:
     find {{dist_dir}} -mindepth 1 ! -name index.html -exec rm -rf {} + 2>/dev/null || true
     rm -rf {{web_dir}}/node_modules
-
-# load: docker build + up (no local npm/go needed)
-load: up
