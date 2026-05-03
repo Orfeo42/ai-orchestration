@@ -38,9 +38,9 @@ build: web go-build
 # full check: vet + test
 check: go-vet go-test
 
-# build + run ALL services detached (frontend built inside web/Dockerfile)
-build-up:
-    docker compose up --build -d
+# build + run services detached (no arg = all; pass service name to rebuild one)
+build-up service="":
+    docker compose up --build -d {{ service }}
 
 # docker compose up without rebuild
 start:
