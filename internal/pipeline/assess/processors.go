@@ -49,11 +49,12 @@ func (p FetchComments) Run(ctx context.Context, s *state.Assess) error {
 type AssessClarity struct {
 	Claude       agent.Agent
 	ProjectsRoot string
+	WorkerID     string
 }
 
 func (p AssessClarity) Run(ctx context.Context, s *state.Assess) error {
 	s.Handle.SetPhase(ctx, runstore.PhaseAssessing)
-	result, err := p.Claude.AssessIssue(ctx, s.Issue, s.Comments, s.Proj.Path(p.ProjectsRoot), s.Handle.Sink())
+	result, err := p.Claude.AssessIssue(ctx, s.Issue, s.Comments, s.Proj.Path(p.ProjectsRoot, p.WorkerID), s.Handle.Sink())
 	if err != nil {
 		return fmt.Errorf("assess issue: %w", err)
 	}

@@ -33,11 +33,17 @@ var _ Forgejo = &MockForgejo{}
 //			GetCommentsFunc: func(owner string, repo string, issueNumber int) ([]models.IssueComment, error) {
 //				panic("mock out the GetComments method")
 //			},
+//			GetIssueFunc: func(owner string, repo string, issueNumber int) (models.ForgejoIssue, error) {
+//				panic("mock out the GetIssue method")
+//			},
 //			GetIssuesFunc: func(owner string, repo string, label string, assignee *string) ([]models.ForgejoIssue, error) {
 //				panic("mock out the GetIssues method")
 //			},
 //			GetLabelIDFunc: func(owner string, repo string, name string) (*int, error) {
 //				panic("mock out the GetLabelID method")
+//			},
+//			GetPRFunc: func(owner string, repo string, prNumber int) (PRDetails, error) {
+//				panic("mock out the GetPR method")
 //			},
 //			GetPRDiffFunc: func(owner string, repo string, prNumber int) (string, error) {
 //				panic("mock out the GetPRDiff method")
@@ -70,11 +76,17 @@ type MockForgejo struct {
 	// GetCommentsFunc mocks the GetComments method.
 	GetCommentsFunc func(owner string, repo string, issueNumber int) ([]models.IssueComment, error)
 
+	// GetIssueFunc mocks the GetIssue method.
+	GetIssueFunc func(owner string, repo string, issueNumber int) (models.ForgejoIssue, error)
+
 	// GetIssuesFunc mocks the GetIssues method.
 	GetIssuesFunc func(owner string, repo string, label string, assignee *string) ([]models.ForgejoIssue, error)
 
 	// GetLabelIDFunc mocks the GetLabelID method.
 	GetLabelIDFunc func(owner string, repo string, name string) (*int, error)
+
+	// GetPRFunc mocks the GetPR method.
+	GetPRFunc func(owner string, repo string, prNumber int) (PRDetails, error)
 
 	// GetPRDiffFunc mocks the GetPRDiff method.
 	GetPRDiffFunc func(owner string, repo string, prNumber int) (string, error)
@@ -146,6 +158,15 @@ type MockForgejo struct {
 			// IssueNumber is the issueNumber argument value.
 			IssueNumber int
 		}
+		// GetIssue holds details about calls to the GetIssue method.
+		GetIssue []struct {
+			// Owner is the owner argument value.
+			Owner string
+			// Repo is the repo argument value.
+			Repo string
+			// IssueNumber is the issueNumber argument value.
+			IssueNumber int
+		}
 		// GetIssues holds details about calls to the GetIssues method.
 		GetIssues []struct {
 			// Owner is the owner argument value.
@@ -165,6 +186,15 @@ type MockForgejo struct {
 			Repo string
 			// Name is the name argument value.
 			Name string
+		}
+		// GetPR holds details about calls to the GetPR method.
+		GetPR []struct {
+			// Owner is the owner argument value.
+			Owner string
+			// Repo is the repo argument value.
+			Repo string
+			// PrNumber is the prNumber argument value.
+			PrNumber int
 		}
 		// GetPRDiff holds details about calls to the GetPRDiff method.
 		GetPRDiff []struct {
@@ -203,8 +233,10 @@ type MockForgejo struct {
 	lockCreatePR       sync.RWMutex
 	lockCreatePRReview sync.RWMutex
 	lockGetComments    sync.RWMutex
+	lockGetIssue       sync.RWMutex
 	lockGetIssues      sync.RWMutex
 	lockGetLabelID     sync.RWMutex
+	lockGetPR          sync.RWMutex
 	lockGetPRDiff      sync.RWMutex
 	lockRemoveLabel    sync.RWMutex
 	lockUpdatePR       sync.RWMutex
@@ -438,6 +470,46 @@ func (mock *MockForgejo) GetCommentsCalls() []struct {
 	return calls
 }
 
+// GetIssue calls GetIssueFunc.
+func (mock *MockForgejo) GetIssue(owner string, repo string, issueNumber int) (models.ForgejoIssue, error) {
+	if mock.GetIssueFunc == nil {
+		panic("MockForgejo.GetIssueFunc: method is nil but Forgejo.GetIssue was just called")
+	}
+	callInfo := struct {
+		Owner       string
+		Repo        string
+		IssueNumber int
+	}{
+		Owner:       owner,
+		Repo:        repo,
+		IssueNumber: issueNumber,
+	}
+	mock.lockGetIssue.Lock()
+	mock.calls.GetIssue = append(mock.calls.GetIssue, callInfo)
+	mock.lockGetIssue.Unlock()
+	return mock.GetIssueFunc(owner, repo, issueNumber)
+}
+
+// GetIssueCalls gets all the calls that were made to GetIssue.
+// Check the length with:
+//
+//	len(mockedForgejo.GetIssueCalls())
+func (mock *MockForgejo) GetIssueCalls() []struct {
+	Owner       string
+	Repo        string
+	IssueNumber int
+} {
+	var calls []struct {
+		Owner       string
+		Repo        string
+		IssueNumber int
+	}
+	mock.lockGetIssue.RLock()
+	calls = mock.calls.GetIssue
+	mock.lockGetIssue.RUnlock()
+	return calls
+}
+
 // GetIssues calls GetIssuesFunc.
 func (mock *MockForgejo) GetIssues(owner string, repo string, label string, assignee *string) ([]models.ForgejoIssue, error) {
 	if mock.GetIssuesFunc == nil {
@@ -519,6 +591,46 @@ func (mock *MockForgejo) GetLabelIDCalls() []struct {
 	mock.lockGetLabelID.RLock()
 	calls = mock.calls.GetLabelID
 	mock.lockGetLabelID.RUnlock()
+	return calls
+}
+
+// GetPR calls GetPRFunc.
+func (mock *MockForgejo) GetPR(owner string, repo string, prNumber int) (PRDetails, error) {
+	if mock.GetPRFunc == nil {
+		panic("MockForgejo.GetPRFunc: method is nil but Forgejo.GetPR was just called")
+	}
+	callInfo := struct {
+		Owner    string
+		Repo     string
+		PrNumber int
+	}{
+		Owner:    owner,
+		Repo:     repo,
+		PrNumber: prNumber,
+	}
+	mock.lockGetPR.Lock()
+	mock.calls.GetPR = append(mock.calls.GetPR, callInfo)
+	mock.lockGetPR.Unlock()
+	return mock.GetPRFunc(owner, repo, prNumber)
+}
+
+// GetPRCalls gets all the calls that were made to GetPR.
+// Check the length with:
+//
+//	len(mockedForgejo.GetPRCalls())
+func (mock *MockForgejo) GetPRCalls() []struct {
+	Owner    string
+	Repo     string
+	PrNumber int
+} {
+	var calls []struct {
+		Owner    string
+		Repo     string
+		PrNumber int
+	}
+	mock.lockGetPR.RLock()
+	calls = mock.calls.GetPR
+	mock.lockGetPR.RUnlock()
 	return calls
 }
 

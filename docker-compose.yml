@@ -108,6 +108,8 @@ services:
     environment:
       LISTEN_ADDR: 0.0.0.0:8080
       REDIS_URL: ${REDIS_URL:-redis://redis:6379}
+      FORGEJO_URL: ${FORGEJO_URL}
+      FORGEJO_TOKEN: ${FORGEJO_TOKEN}
       TZ: Europe/Rome
     ports:
       - "127.0.0.1:8080:8080"

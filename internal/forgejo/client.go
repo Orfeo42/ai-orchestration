@@ -89,6 +89,65 @@ func (c *Client) GetIssues(owner, repo, label string, assignee *string) ([]model
 	return issues, nil
 }
 
+func (c *Client) GetIssue(owner, repo string, issueNumber int) (models.ForgejoIssue, error) {
+	body, err := c.get(fmt.Sprintf("/api/v1/repos/%s/%s/issues/%d", owner, repo, issueNumber))
+	if err != nil {
+		return models.ForgejoIssue{}, err
+	}
+
+	var raw struct {
+		ID     int    `json:"id"`
+		Number int    `json:"number"`
+		Title  string `json:"title"`
+		Body   string `json:"body"`
+		Labels []struct {
+			Name string `json:"name"`
+		} `json:"labels"`
+	}
+	if err := json.Unmarshal(body, &raw); err != nil {
+		return models.ForgejoIssue{}, fmt.Errorf("unmarshal issue: %w", err)
+	}
+
+	labels := make([]string, len(raw.Labels))
+	for i, l := range raw.Labels {
+		labels[i] = l.Name
+	}
+	return models.ForgejoIssue{
+		ID:        raw.ID,
+		Number:    raw.Number,
+		Title:     raw.Title,
+		Body:      raw.Body,
+		RepoOwner: owner,
+		RepoName:  repo,
+		Labels:    labels,
+	}, nil
+}
+
+func (c *Client) GetPR(owner, repo string, prNumber int) (PRDetails, error) {
+	body, err := c.get(fmt.Sprintf("/api/v1/repos/%s/%s/pulls/%d", owner, repo, prNumber))
+	if err != nil {
+		return PRDetails{}, err
+	}
+
+	var raw struct {
+		Number int    `json:"number"`
+		Title  string `json:"title"`
+		Body   string `json:"body"`
+		Head   struct {
+			Ref string `json:"ref"`
+		} `json:"head"`
+	}
+	if err := json.Unmarshal(body, &raw); err != nil {
+		return PRDetails{}, fmt.Errorf("unmarshal pr: %w", err)
+	}
+	return PRDetails{
+		Number: raw.Number,
+		Title:  raw.Title,
+		Body:   raw.Body,
+		Branch: raw.Head.Ref,
+	}, nil
+}
+
 func (c *Client) GetComments(owner, repo string, issueNumber int) ([]models.IssueComment, error) {
 	body, err := c.get(fmt.Sprintf("/api/v1/repos/%s/%s/issues/%d/comments", owner, repo, issueNumber))
 	if err != nil {

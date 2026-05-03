@@ -65,17 +65,16 @@ func (MarkCommentsSeen) Run(_ context.Context, s *state.Impl) error {
 }
 
 type PrepareBranch struct {
-	GitFactory    gitops.Factory
-	ForgejoURL    string
-	ForgejoToken  string
-	RepoOwner     string
-	RepoName      string
-	ProjectPath   string
-	BaseBranch    string
+	GitFactory   gitops.Factory
+	ForgejoURL   string
+	ForgejoToken string
+	RepoOwner    string
+	RepoName     string
+	BaseBranch   string
 }
 
 func (p PrepareBranch) Run(_ context.Context, s *state.Impl) error {
-	git := p.GitFactory(p.ProjectPath, p.ForgejoURL, p.ForgejoToken, p.RepoOwner, p.RepoName)
+	git := p.GitFactory(s.ProjectPath, p.ForgejoURL, p.ForgejoToken, p.RepoOwner, p.RepoName)
 	s.Git = git
 	if err := git.Checkout(p.BaseBranch); err != nil {
 		return fmt.Errorf("checkout base: %w", err)
@@ -115,13 +114,12 @@ func (p RefreshFreshComments) Run(ctx context.Context, s *state.Impl) error {
 }
 
 type ImplementAttempt struct {
-	Claude      agent.Agent
-	ProjectPath string
+	Claude agent.Agent
 }
 
 func (p ImplementAttempt) Run(ctx context.Context, s *state.Impl) error {
 	notes := s.Handle.DrainNotes()
-	impl, err := p.Claude.ImplementIssue(ctx, s.Issue, s.FreshComments, p.ProjectPath, "", withNotes(s.TestError, notes), s.Handle.Sink())
+	impl, err := p.Claude.ImplementIssue(ctx, s.Issue, s.FreshComments, s.ProjectPath, "", withNotes(s.TestError, notes), s.Handle.Sink())
 	if err != nil {
 		if pending := s.Handle.DrainNotes(); len(pending) > 0 || ctx.Err() != nil {
 			s.Handle.PrependNotes(pending)
@@ -158,7 +156,7 @@ type RunTests struct {
 
 func (p RunTests) Run(ctx context.Context, s *state.Impl) error {
 	s.Handle.SetPhase(ctx, runstore.PhaseTesting)
-	ok, tErr := p.Runner(s.Proj.Path(""))
+	ok, tErr := p.Runner(s.ProjectPath)
 	if ok {
 		s.TestError = nil
 		return nil
@@ -235,7 +233,7 @@ func (p OpenPR) writePRDescription(ctx context.Context, s *state.Impl, pr models
 		return
 	}
 	s.Handle.SetPhase(ctx, runstore.PhasePRDesc)
-	desc, err := p.PrWriter.Generate(ctx, s.Issue, s.Proj.Path(""), diff, s.Handle.Sink())
+	desc, err := p.PrWriter.Generate(ctx, s.Issue, s.ProjectPath, diff, s.Handle.Sink())
 	if err != nil {
 		slog.WarnContext(ctx, "pr description generation failed",
 			"error", err,
@@ -275,7 +273,7 @@ func (p OpenPR) queueReview(ctx context.Context, s *state.Impl, pr models.Forgej
 		PRNumber:    pr.Number,
 		PRTitle:     "feat: " + s.Job.IssueTitle,
 		PRBranch:    s.Branch,
-		ProjectPath: s.Proj.Path(""),
+		Project:     s.Job.Project,
 		IssueNumber: s.Job.IssueNumber,
 		Diff:        diff,
 	}

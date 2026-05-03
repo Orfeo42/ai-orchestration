@@ -16,6 +16,7 @@ import (
 	"ai-orchestration/internal/gitops"
 	"ai-orchestration/internal/models"
 	"ai-orchestration/internal/pipeline"
+	"ai-orchestration/internal/pipeline/checkout"
 	pipelineimpl "ai-orchestration/internal/pipeline/impl"
 	"ai-orchestration/internal/pipeline/state"
 	"ai-orchestration/internal/queue"
@@ -95,6 +96,14 @@ func handleImplJob(ctx context.Context, deps implDeps, job models.ImplJob) {
 		return
 	}
 
+	payload, err := json.Marshal(job)
+	if err != nil {
+		slog.ErrorContext(ctx, "marshal impl job payload failed",
+			"issue", job.IssueNumber,
+			"error", err,
+		)
+		return
+	}
 	handle := runstore.NewRunHandle(ctx, deps.store, deps.ctrl, runstore.Run{
 		Service:     runstore.ServiceImpl,
 		RepoOwner:   job.RepoOwner,
@@ -103,11 +112,18 @@ func handleImplJob(ctx context.Context, deps implDeps, job models.ImplJob) {
 		Title:       job.IssueTitle,
 		Project:     job.Project,
 		Phase:       runstore.PhaseImplementing,
+		JobPayload:  payload,
 	})
 	defer handle.Cancel()
 
-	projectPath := proj.Path(deps.cfg.projectsRoot)
 	steps := []pipeline.Processor[state.Impl]{
+		checkout.ImplCheckout{
+			GitFactory:   gitops.DefaultFactory,
+			ForgejoURL:   deps.cfg.forgejoURL,
+			ForgejoToken: deps.cfg.forgejoToken,
+			ProjectsRoot: deps.cfg.projectsRoot,
+			WorkerID:     deps.cfg.workerID,
+		},
 		pipelineimpl.HydrateIssue{},
 		pipelineimpl.FetchComments{Fj: deps.fj},
 		pipelineimpl.MarkCommentsSeen{},
@@ -117,7 +133,6 @@ func handleImplJob(ctx context.Context, deps implDeps, job models.ImplJob) {
 			ForgejoToken: deps.cfg.forgejoToken,
 			RepoOwner:    code.Owner,
 			RepoName:     code.Name,
-			ProjectPath:  projectPath,
 			BaseBranch:   proj.BaseBranch,
 		},
 		pipeline.LoopProcessor[state.Impl]{
@@ -126,7 +141,7 @@ func handleImplJob(ctx context.Context, deps implDeps, job models.ImplJob) {
 			Body: []pipeline.Processor[state.Impl]{
 				pipelineimpl.BeginAttempt{},
 				pipelineimpl.RefreshFreshComments{Fj: deps.fj},
-				pipelineimpl.ImplementAttempt{Claude: deps.claude, ProjectPath: projectPath},
+				pipelineimpl.ImplementAttempt{Claude: deps.claude},
 				pipelineimpl.CheckHasChanges{},
 				pipelineimpl.RunTests{Runner: testrunner.Run},
 			},

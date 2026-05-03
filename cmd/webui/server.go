@@ -11,6 +11,8 @@ import (
 	"time"
 
 	"ai-orchestration/internal/control"
+	"ai-orchestration/internal/forgejo"
+	"ai-orchestration/internal/queue"
 	"ai-orchestration/internal/runstore"
 )
 
@@ -18,12 +20,14 @@ type server struct {
 	addr  string
 	store runstore.Store
 	ctrl  control.Channel
+	rq    queue.Queue
+	fj    forgejo.Forgejo
 	srv   *http.Server
 }
 
-func newServer(addr string, store runstore.Store, ctrl control.Channel) (*server, error) {
+func newServer(addr string, store runstore.Store, ctrl control.Channel, rq queue.Queue, fj forgejo.Forgejo) (*server, error) {
 	mux := http.NewServeMux()
-	api := &apiHandler{store: store, ctrl: ctrl}
+	api := &apiHandler{store: store, ctrl: ctrl, rq: rq, fj: fj}
 
 	mux.HandleFunc("GET /api/runs", api.listRuns)
 	mux.HandleFunc("GET /api/runs/active", api.listActive)
@@ -31,6 +35,8 @@ func newServer(addr string, store runstore.Store, ctrl control.Channel) (*server
 	mux.HandleFunc("GET /api/runs/{id}/events", api.getRunEvents)
 	mux.HandleFunc("POST /api/runs/{id}/cancel", api.cancelRun)
 	mux.HandleFunc("POST /api/runs/{id}/inject", api.injectRun)
+	mux.HandleFunc("POST /api/runs/{id}/retry", api.retryRun)
+	mux.HandleFunc("GET /api/runs/{id}/diff", api.getRunDiff)
 	mux.HandleFunc("GET /api/stats/tokens", api.getDailyTokens)
 	mux.HandleFunc("GET /healthz", api.healthz)
 	mux.HandleFunc("GET /ws/runs/{id}", api.streamRun)
@@ -46,7 +52,7 @@ func newServer(addr string, store runstore.Store, ctrl control.Channel) (*server
 		Handler:           logRequest(mux),
 		ReadHeaderTimeout: 10 * time.Second,
 	}
-	return &server{addr: addr, store: store, ctrl: ctrl, srv: srv}, nil
+	return &server{addr: addr, store: store, ctrl: ctrl, rq: rq, fj: fj, srv: srv}, nil
 }
 
 func (s *server) run(ctx context.Context) error {

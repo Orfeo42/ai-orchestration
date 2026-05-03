@@ -1,4 +1,9 @@
-import type { DailyTokensResponse, Run, RunEvent } from "./types";
+import type {
+  DailyTokensResponse,
+  Run,
+  RunDiffResponse,
+  RunEvent,
+} from "./types";
 
 async function getJSON<T>(path: string): Promise<T> {
   const resp = await fetch(path);
@@ -49,8 +54,16 @@ export async function cancelRun(id: string): Promise<void> {
   return postJSON(`/api/runs/${id}/cancel`);
 }
 
+export async function retryRun(id: string): Promise<void> {
+  return postJSON(`/api/runs/${id}/retry`);
+}
+
 export async function injectNote(id: string, note: string): Promise<void> {
   return postJSON(`/api/runs/${id}/inject`, { note });
+}
+
+export async function getRunDiff(id: string): Promise<RunDiffResponse> {
+  return getJSON<RunDiffResponse>(`/api/runs/${id}/diff`);
 }
 
 export async function getDailyTokens(

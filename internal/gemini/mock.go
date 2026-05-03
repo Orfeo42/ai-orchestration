@@ -98,7 +98,7 @@ var _ DocsWriter = &MockDocsWriter{}
 //
 //		// make and configure a mocked DocsWriter
 //		mockedDocsWriter := &MockDocsWriter{
-//			UpdateReadmeFunc: func(ctx context.Context, job models.ReviewJob, review models.ReviewResult, sink events.Sink) (bool, error) {
+//			UpdateReadmeFunc: func(ctx context.Context, job models.ReviewJob, projectPath string, review models.ReviewResult, sink events.Sink) (bool, error) {
 //				panic("mock out the UpdateReadme method")
 //			},
 //		}
@@ -109,7 +109,7 @@ var _ DocsWriter = &MockDocsWriter{}
 //	}
 type MockDocsWriter struct {
 	// UpdateReadmeFunc mocks the UpdateReadme method.
-	UpdateReadmeFunc func(ctx context.Context, job models.ReviewJob, review models.ReviewResult, sink events.Sink) (bool, error)
+	UpdateReadmeFunc func(ctx context.Context, job models.ReviewJob, projectPath string, review models.ReviewResult, sink events.Sink) (bool, error)
 
 	// calls tracks calls to the methods.
 	calls struct {
@@ -119,6 +119,8 @@ type MockDocsWriter struct {
 			Ctx context.Context
 			// Job is the job argument value.
 			Job models.ReviewJob
+			// ProjectPath is the projectPath argument value.
+			ProjectPath string
 			// Review is the review argument value.
 			Review models.ReviewResult
 			// Sink is the sink argument value.
@@ -129,25 +131,27 @@ type MockDocsWriter struct {
 }
 
 // UpdateReadme calls UpdateReadmeFunc.
-func (mock *MockDocsWriter) UpdateReadme(ctx context.Context, job models.ReviewJob, review models.ReviewResult, sink events.Sink) (bool, error) {
+func (mock *MockDocsWriter) UpdateReadme(ctx context.Context, job models.ReviewJob, projectPath string, review models.ReviewResult, sink events.Sink) (bool, error) {
 	if mock.UpdateReadmeFunc == nil {
 		panic("MockDocsWriter.UpdateReadmeFunc: method is nil but DocsWriter.UpdateReadme was just called")
 	}
 	callInfo := struct {
-		Ctx    context.Context
-		Job    models.ReviewJob
-		Review models.ReviewResult
-		Sink   events.Sink
+		Ctx         context.Context
+		Job         models.ReviewJob
+		ProjectPath string
+		Review      models.ReviewResult
+		Sink        events.Sink
 	}{
-		Ctx:    ctx,
-		Job:    job,
-		Review: review,
-		Sink:   sink,
+		Ctx:         ctx,
+		Job:         job,
+		ProjectPath: projectPath,
+		Review:      review,
+		Sink:        sink,
 	}
 	mock.lockUpdateReadme.Lock()
 	mock.calls.UpdateReadme = append(mock.calls.UpdateReadme, callInfo)
 	mock.lockUpdateReadme.Unlock()
-	return mock.UpdateReadmeFunc(ctx, job, review, sink)
+	return mock.UpdateReadmeFunc(ctx, job, projectPath, review, sink)
 }
 
 // UpdateReadmeCalls gets all the calls that were made to UpdateReadme.
@@ -155,16 +159,18 @@ func (mock *MockDocsWriter) UpdateReadme(ctx context.Context, job models.ReviewJ
 //
 //	len(mockedDocsWriter.UpdateReadmeCalls())
 func (mock *MockDocsWriter) UpdateReadmeCalls() []struct {
-	Ctx    context.Context
-	Job    models.ReviewJob
-	Review models.ReviewResult
-	Sink   events.Sink
+	Ctx         context.Context
+	Job         models.ReviewJob
+	ProjectPath string
+	Review      models.ReviewResult
+	Sink        events.Sink
 } {
 	var calls []struct {
-		Ctx    context.Context
-		Job    models.ReviewJob
-		Review models.ReviewResult
-		Sink   events.Sink
+		Ctx         context.Context
+		Job         models.ReviewJob
+		ProjectPath string
+		Review      models.ReviewResult
+		Sink        events.Sink
 	}
 	mock.lockUpdateReadme.RLock()
 	calls = mock.calls.UpdateReadme

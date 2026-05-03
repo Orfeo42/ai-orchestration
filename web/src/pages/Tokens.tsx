@@ -1,6 +1,37 @@
 import { useEffect, useState } from "react";
-import { getDailyTokens } from "../api";
-import type { DailyTokensResponse } from "../types";
+import { getDailyTokens } from "@/api";
+import type { DailyTokensResponse } from "@/types";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+
+function StatCard({ label, value }: { label: string; value: number }) {
+  return (
+    <Card>
+      <CardContent className="px-4 py-3">
+        <div className="text-xs uppercase tracking-wide text-muted-foreground">
+          {label}
+        </div>
+        <div className="mt-1 text-2xl font-semibold tabular-nums">
+          {value.toLocaleString()}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
 
 export default function Tokens() {
   const [data, setData] = useState<DailyTokensResponse | null>(null);
@@ -12,10 +43,18 @@ export default function Tokens() {
       .catch((e) => setError(String(e)));
   }, []);
 
-  if (error) return <div className="error">{error}</div>;
-  if (!data) return <div>Loading...</div>;
+  if (error)
+    return (
+      <Alert variant="destructive">
+        <AlertDescription>{error}</AlertDescription>
+      </Alert>
+    );
+  if (!data)
+    return <div className="text-sm text-muted-foreground">Loading...</div>;
 
-  const days = Object.entries(data.daily).sort(([a], [b]) => a.localeCompare(b));
+  const days = Object.entries(data.daily).sort(([a], [b]) =>
+    a.localeCompare(b),
+  );
   const totals = days.reduce(
     (acc, [, u]) => ({
       input: acc.input + u.input,
@@ -27,50 +66,71 @@ export default function Tokens() {
   );
 
   return (
-    <section className="tokens-page">
-      <header className="page-header">
-        <h2>Token Usage</h2>
-        <div className="meta">
+    <div className="flex flex-col gap-5">
+      <div className="flex flex-col gap-1">
+        <h1 className="text-2xl font-semibold tracking-tight">Token usage</h1>
+        <p className="text-sm text-muted-foreground">
           {data.from} → {data.to}
-        </div>
-      </header>
-
-      <div className="usage-bar">
-        <div>input: {totals.input.toLocaleString()}</div>
-        <div>output: {totals.output.toLocaleString()}</div>
-        <div>cache read: {totals.cache_read_input.toLocaleString()}</div>
-        <div>cache create: {totals.cache_creation_input.toLocaleString()}</div>
+        </p>
       </div>
 
-      <table className="runs-table">
-        <thead>
-          <tr>
-            <th>Date</th>
-            <th>Input</th>
-            <th>Output</th>
-            <th>Cache create</th>
-            <th>Cache read</th>
-          </tr>
-        </thead>
-        <tbody>
-          {days.map(([date, u]) => (
-            <tr key={date}>
-              <td>{date}</td>
-              <td>{u.input.toLocaleString()}</td>
-              <td>{u.output.toLocaleString()}</td>
-              <td>{u.cache_creation_input.toLocaleString()}</td>
-              <td>{u.cache_read_input.toLocaleString()}</td>
-            </tr>
-          ))}
-          {days.length === 0 && (
-            <tr>
-              <td colSpan={5} className="empty">
-                No usage yet.
-              </td>
-            </tr>
-          )}
-        </tbody>
-      </table>
-    </section>
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+        <StatCard label="Input" value={totals.input} />
+        <StatCard label="Output" value={totals.output} />
+        <StatCard label="Cache read" value={totals.cache_read_input} />
+        <StatCard label="Cache create" value={totals.cache_creation_input} />
+      </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Daily breakdown</CardTitle>
+          <CardDescription>Per-day Claude token consumption.</CardDescription>
+        </CardHeader>
+        <CardContent className="px-0">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead className="pl-6">Date</TableHead>
+                <TableHead className="text-right">Input</TableHead>
+                <TableHead className="text-right">Output</TableHead>
+                <TableHead className="text-right">Cache create</TableHead>
+                <TableHead className="pr-6 text-right">Cache read</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {days.map(([date, u]) => (
+                <TableRow key={date}>
+                  <TableCell className="pl-6 font-mono text-xs">
+                    {date}
+                  </TableCell>
+                  <TableCell className="text-right tabular-nums">
+                    {u.input.toLocaleString()}
+                  </TableCell>
+                  <TableCell className="text-right tabular-nums">
+                    {u.output.toLocaleString()}
+                  </TableCell>
+                  <TableCell className="text-right tabular-nums">
+                    {u.cache_creation_input.toLocaleString()}
+                  </TableCell>
+                  <TableCell className="pr-6 text-right tabular-nums">
+                    {u.cache_read_input.toLocaleString()}
+                  </TableCell>
+                </TableRow>
+              ))}
+              {days.length === 0 && (
+                <TableRow>
+                  <TableCell
+                    colSpan={5}
+                    className="h-24 text-center text-muted-foreground"
+                  >
+                    No usage yet.
+                  </TableCell>
+                </TableRow>
+              )}
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
+    </div>
   );
 }

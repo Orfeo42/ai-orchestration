@@ -8,13 +8,13 @@ default:
 
 # install + build react SPA -> cmd/webui/dist
 web:
-    cd {{web_dir}} && npm install --no-audit --no-fund
-    cd {{web_dir}} && npm run build
+    cd {{ web_dir }} && npm install --no-audit --no-fund
+    cd {{ web_dir }} && npm run build
 
 # dev server for react SPA (proxies /api, /ws -> 127.0.0.1:8080)
 web-dev:
-    cd {{web_dir}} && npm install --no-audit --no-fund
-    cd {{web_dir}} && npm run dev
+    cd {{ web_dir }} && npm install --no-audit --no-fund
+    cd {{ web_dir }} && npm run dev
 
 # go build all binaries
 go-build:
@@ -56,7 +56,7 @@ restart:
 
 # tail docker logs
 logs service="":
-    docker compose logs -f {{service}}
+    docker compose logs -f {{ service }}
 
 # rebuild + restart webui only
 webui-restart:
@@ -72,7 +72,7 @@ consumer-restart:
 
 # scale impl-consumer to N replicas
 scale-impl n="1":
-    docker compose up -d --scale impl-consumer={{n}} impl-consumer
+    docker compose up -d --scale impl-consumer={{ n }} impl-consumer
 
 # run webui locally against local redis
 run-webui:
@@ -96,5 +96,8 @@ run-review-consumer:
 
 # clean build artifacts (keeps dist/index.html placeholder for go:embed)
 clean:
-    find {{dist_dir}} -mindepth 1 ! -name index.html -exec rm -rf {} + 2>/dev/null || true
-    rm -rf {{web_dir}}/node_modules
+    find {{ dist_dir }} -mindepth 1 ! -name index.html -exec rm -rf {} + 2>/dev/null || true
+    rm -rf {{ web_dir }}/node_modules
+
+update-credential:
+    cp ~/.claude/.credentials.json ./config/claude/.credentials.json

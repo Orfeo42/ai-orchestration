@@ -14,7 +14,7 @@ type Reviewer interface {
 }
 
 type DocsWriter interface {
-	UpdateReadme(ctx context.Context, job models.ReviewJob, review models.ReviewResult, sink events.Sink) (bool, error)
+	UpdateReadme(ctx context.Context, job models.ReviewJob, projectPath string, review models.ReviewResult, sink events.Sink) (bool, error)
 }
 
 type PRDescWriter interface {

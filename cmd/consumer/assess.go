@@ -9,9 +9,11 @@ import (
 	"time"
 
 	"ai-orchestration/internal/forgejo"
+	"ai-orchestration/internal/gitops"
 	"ai-orchestration/internal/models"
 	"ai-orchestration/internal/pipeline"
 	"ai-orchestration/internal/pipeline/assess"
+	"ai-orchestration/internal/pipeline/checkout"
 	"ai-orchestration/internal/pipeline/state"
 	"ai-orchestration/internal/queue"
 	"ai-orchestration/internal/runstore"
@@ -19,9 +21,16 @@ import (
 
 func runAssessConsumer(ctx context.Context, deps consumerDeps) {
 	steps := []pipeline.Processor[state.Assess]{
+		checkout.AssessCheckout{
+			GitFactory:   gitops.DefaultFactory,
+			ForgejoURL:   deps.cfg.forgejoURL,
+			ForgejoToken: deps.cfg.forgejoToken,
+			ProjectsRoot: deps.cfg.projectsRoot,
+			WorkerID:     deps.cfg.workerID,
+		},
 		assess.HydrateIssue{},
 		assess.FetchComments{Fj: deps.fj},
-		assess.AssessClarity{Claude: deps.claude, ProjectsRoot: deps.cfg.projectsRoot},
+		assess.AssessClarity{Claude: deps.claude, ProjectsRoot: deps.cfg.projectsRoot, WorkerID: deps.cfg.workerID},
 		assess.EnqueueImpl{Rq: deps.rq},
 	}
 
@@ -67,6 +76,14 @@ func handleAssessJob(ctx context.Context, deps consumerDeps, steps []pipeline.Pr
 		return
 	}
 
+	payload, err := json.Marshal(job)
+	if err != nil {
+		slog.ErrorContext(ctx, "marshal assess job payload failed",
+			"issue", job.IssueNumber,
+			"error", err,
+		)
+		return
+	}
 	handle := runstore.NewRunHandle(ctx, deps.store, deps.ctrl, runstore.Run{
 		Service:     runstore.ServiceAssess,
 		RepoOwner:   job.RepoOwner,
@@ -75,11 +92,12 @@ func handleAssessJob(ctx context.Context, deps consumerDeps, steps []pipeline.Pr
 		Title:       job.IssueTitle,
 		Project:     job.Project,
 		Phase:       runstore.PhaseAssessing,
+		JobPayload:  payload,
 	})
 	defer handle.Cancel()
 
 	s := state.Assess{Job: job, Proj: proj, Handle: handle}
-	err := pipeline.Execute(handle.Ctx(), &s, steps)
+	err = pipeline.Execute(handle.Ctx(), &s, steps)
 	key := fmt.Sprintf("%s/%s#%d", job.RepoOwner, job.RepoName, job.IssueNumber)
 
 	switch {

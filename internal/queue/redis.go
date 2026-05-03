@@ -22,6 +22,10 @@ func New(url string) (*RedisQueue, error) {
 	return &RedisQueue{rdb: redis.NewClient(opts)}, nil
 }
 
+func NewFromClient(client *redis.Client) *RedisQueue {
+	return &RedisQueue{rdb: client}
+}
+
 func (q *RedisQueue) Push(ctx context.Context, queueName string, v any) error {
 	data, err := json.Marshal(v)
 	if err != nil {

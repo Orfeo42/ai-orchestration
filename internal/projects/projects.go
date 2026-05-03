@@ -14,15 +14,18 @@ type Config struct {
 	BaseBranch string `json:"base_branch"`
 }
 
-func (c Config) Path(root string) string {
+func (c Config) Path(root, workerID string) string {
 	if root == "" {
 		root = DefaultRoot
 	}
-	parts := strings.SplitN(c.Repo, "/", 2)
-	if len(parts) == 2 {
-		return root + "/" + parts[1]
+	repoName := c.Repo
+	if parts := strings.SplitN(c.Repo, "/", 2); len(parts) == 2 {
+		repoName = parts[1]
 	}
-	return root + "/" + c.Repo
+	if workerID == "" {
+		return root + "/" + repoName
+	}
+	return root + "/" + workerID + "/" + repoName
 }
 
 func Load(path string) (map[string]Config, error) {

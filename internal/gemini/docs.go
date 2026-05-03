@@ -44,15 +44,15 @@ func NewDocsWriter(ctx context.Context, apiKey string) (*GeminiDocsWriter, error
 	}, nil
 }
 
-func (d *GeminiDocsWriter) UpdateReadme(ctx context.Context, job models.ReviewJob, review models.ReviewResult, sink events.Sink) (bool, error) {
-	readmePath := filepath.Join(job.ProjectPath, "README.md")
+func (d *GeminiDocsWriter) UpdateReadme(ctx context.Context, job models.ReviewJob, projectPath string, review models.ReviewResult, sink events.Sink) (bool, error) {
+	readmePath := filepath.Join(projectPath, "README.md")
 	existing := ""
 	if data, err := os.ReadFile(readmePath); err == nil {
 		existing = string(data)
 	}
 
 	slog.InfoContext(ctx, "updating README",
-		"path", job.ProjectPath,
+		"path", projectPath,
 	)
 	diff := job.Diff
 	if len(diff) > 4000 {

@@ -2,7 +2,9 @@ package main
 
 import (
 	"log/slog"
+	"os"
 
+	"ai-orchestration/internal/forgejo"
 	"ai-orchestration/internal/runtime"
 )
 
@@ -27,7 +29,22 @@ func main() {
 	}
 	defer runtime.CloseAll("control", ctrl)
 
-	srv, err := newServer(addr, store, ctrl)
+	rq, err := runtime.NewQueue(redisURL)
+	if err != nil {
+		runtime.Die("queue", err)
+	}
+	defer runtime.CloseAll("queue", rq)
+
+	var fj forgejo.Forgejo
+	forgejoURL := os.Getenv("FORGEJO_URL")
+	forgejoToken := os.Getenv("FORGEJO_TOKEN")
+	if forgejoURL != "" && forgejoToken != "" {
+		fj = forgejo.New(forgejoURL, forgejoToken)
+	} else {
+		slog.Warn("FORGEJO_URL/FORGEJO_TOKEN not set; retry of legacy runs without job_payload will fail")
+	}
+
+	srv, err := newServer(addr, store, ctrl, rq, fj)
 	if err != nil {
 		runtime.Die("server", err)
 	}

@@ -16,6 +16,9 @@ import (
 
 	"ai-orchestration/internal/control"
 	"ai-orchestration/internal/events"
+	"ai-orchestration/internal/forgejo"
+	"ai-orchestration/internal/models"
+	"ai-orchestration/internal/queue"
 	"ai-orchestration/internal/runstore"
 )
 
@@ -23,6 +26,8 @@ type testServer struct {
 	ts    *httptest.Server
 	store *runstore.RedisStore
 	ctrl  *control.RedisChannel
+	rq    *queue.RedisQueue
+	fj    *forgejo.MockForgejo
 }
 
 func newTestServer(t *testing.T) testServer {
@@ -32,11 +37,13 @@ func newTestServer(t *testing.T) testServer {
 	t.Cleanup(func() { _ = client.Close() })
 	store := runstore.NewRedisFromClient(client)
 	ctrl := control.NewRedisFromClient(client)
-	srv, err := newServer("127.0.0.1:0", store, ctrl)
+	rq := queue.NewFromClient(client)
+	fj := &forgejo.MockForgejo{}
+	srv, err := newServer("127.0.0.1:0", store, ctrl, rq, fj)
 	require.NoError(t, err)
 	ts := httptest.NewServer(srv.srv.Handler)
 	t.Cleanup(ts.Close)
-	return testServer{ts: ts, store: store, ctrl: ctrl}
+	return testServer{ts: ts, store: store, ctrl: ctrl, rq: rq, fj: fj}
 }
 
 func TestListRunsEmpty(t *testing.T) {
@@ -175,6 +182,94 @@ func TestHealthz(t *testing.T) {
 		require.NoError(t, err)
 		defer resp.Body.Close()
 		assert.Equal(t, http.StatusOK, resp.StatusCode)
+	})
+}
+
+func TestRetryEndpoint(t *testing.T) {
+	t.Run("re-enqueues failed assess run payload", func(t *testing.T) {
+		s := newTestServer(t)
+		ctx := context.Background()
+		payload := json.RawMessage(`{"repo_owner":"acme","repo_name":"x","issue_number":7}`)
+		require.NoError(t, s.store.Create(ctx, runstore.Run{
+			ID:         "rR",
+			Service:    runstore.ServiceAssess,
+			Phase:      runstore.PhaseFailed,
+			StartedAt:  time.Now().UTC(),
+			JobPayload: payload,
+		}))
+
+		resp, err := http.Post(s.ts.URL+"/api/runs/rR/retry", "application/json", nil)
+		require.NoError(t, err)
+		defer resp.Body.Close()
+		assert.Equal(t, http.StatusNoContent, resp.StatusCode)
+
+		raw, err := s.rq.Pop(ctx, queue.QueueAssess, time.Second)
+		require.NoError(t, err)
+		require.NotNil(t, raw)
+		assert.JSONEq(t, string(payload), string(raw))
+	})
+
+	t.Run("rejects retry when phase not terminal-failure", func(t *testing.T) {
+		s := newTestServer(t)
+		ctx := context.Background()
+		require.NoError(t, s.store.Create(ctx, runstore.Run{
+			ID:        "rA",
+			Service:   runstore.ServiceImpl,
+			Phase:     runstore.PhaseImplementing,
+			StartedAt: time.Now().UTC(),
+		}))
+
+		resp, err := http.Post(s.ts.URL+"/api/runs/rA/retry", "application/json", nil)
+		require.NoError(t, err)
+		defer resp.Body.Close()
+		assert.Equal(t, http.StatusConflict, resp.StatusCode)
+	})
+
+	t.Run("rebuilds missing payload via Forgejo", func(t *testing.T) {
+		s := newTestServer(t)
+		ctx := context.Background()
+		require.NoError(t, s.store.Create(ctx, runstore.Run{
+			ID:          "rB",
+			Service:     runstore.ServiceImpl,
+			RepoOwner:   "acme",
+			RepoName:    "x",
+			IssueNumber: 42,
+			Project:     "acme/x",
+			Phase:       runstore.PhaseFailed,
+			StartedAt:   time.Now().UTC(),
+		}))
+		s.fj.GetIssueFunc = func(owner, repo string, n int) (models.ForgejoIssue, error) {
+			assert.Equal(t, "acme", owner)
+			assert.Equal(t, "x", repo)
+			assert.Equal(t, 42, n)
+			return models.ForgejoIssue{Number: n, Title: "T", Body: "B"}, nil
+		}
+
+		resp, err := http.Post(s.ts.URL+"/api/runs/rB/retry", "application/json", nil)
+		require.NoError(t, err)
+		defer resp.Body.Close()
+		assert.Equal(t, http.StatusNoContent, resp.StatusCode)
+
+		raw, err := s.rq.Pop(ctx, queue.QueueImpl, time.Second)
+		require.NoError(t, err)
+		require.NotNil(t, raw)
+		var job models.ImplJob
+		require.NoError(t, json.Unmarshal(raw, &job))
+		assert.Equal(t, 42, job.IssueNumber)
+		assert.Equal(t, "T", job.IssueTitle)
+		assert.Equal(t, "B", job.IssueBody)
+
+		got, err := s.store.Get(ctx, "rB")
+		require.NoError(t, err)
+		assert.NotEmpty(t, got.JobPayload)
+	})
+
+	t.Run("returns 404 for unknown run", func(t *testing.T) {
+		s := newTestServer(t)
+		resp, err := http.Post(s.ts.URL+"/api/runs/missing/retry", "application/json", nil)
+		require.NoError(t, err)
+		defer resp.Body.Close()
+		assert.Equal(t, http.StatusNotFound, resp.StatusCode)
 	})
 }
 

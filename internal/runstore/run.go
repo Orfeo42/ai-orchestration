@@ -1,6 +1,7 @@
 package runstore
 
 import (
+	"encoding/json"
 	"time"
 
 	"ai-orchestration/internal/events"
@@ -60,6 +61,7 @@ type Run struct {
 	Error         string            `json:"error,omitempty"`
 	ClaudeSession string            `json:"claude_session,omitempty"`
 	InjectNotes   []string          `json:"inject_notes,omitempty"`
+	JobPayload    json.RawMessage   `json:"job_payload,omitempty"`
 }
 
 type ListFilter struct {

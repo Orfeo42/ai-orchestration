@@ -11,6 +11,7 @@ import (
 	"ai-orchestration/internal/queue"
 	"ai-orchestration/internal/runstore"
 	"ai-orchestration/internal/runtime"
+	"ai-orchestration/internal/workerreg"
 )
 
 type consumerDeps struct {
@@ -58,6 +59,32 @@ func main() {
 	defer runtime.CloseAll("control", ctrl)
 
 	fj := forgejo.New(cfg.forgejoURL, cfg.forgejoToken)
+
+	registry, err := workerreg.New(cfg.redisURL)
+	if err != nil {
+		runtime.Die("workerreg", err)
+	}
+	defer runtime.CloseAll("workerreg", registry)
+
+	if err := registry.SweepStale(ctx, cfg.projectsRoot, cfg.workerID); err != nil {
+		slog.WarnContext(ctx, "sweep stale worker dirs failed",
+			"error", err,
+		)
+	}
+
+	unregister, err := registry.Register(ctx, cfg.workerID)
+	if err != nil {
+		runtime.Die("workerreg-register", err)
+	}
+	defer func() {
+		unregister()
+		if err := workerreg.RemoveWorkerDir(cfg.projectsRoot, cfg.workerID); err != nil {
+			slog.Warn("remove worker dir on shutdown failed",
+				"worker", cfg.workerID,
+				"error", err,
+			)
+		}
+	}()
 
 	deps := consumerDeps{
 		cfg:   cfg,

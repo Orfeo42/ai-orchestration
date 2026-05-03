@@ -39,7 +39,7 @@ type CheckoutPRBranch struct {
 }
 
 func (p CheckoutPRBranch) Run(_ context.Context, s *state.Review) error {
-	git := p.GitFactory(s.Job.ProjectPath, p.ForgejoURL, p.ForgejoToken, s.Job.RepoOwner, s.Job.RepoName)
+	git := p.GitFactory(s.ProjectPath, p.ForgejoURL, p.ForgejoToken, s.Job.RepoOwner, s.Job.RepoName)
 	s.Git = git
 	if err := git.Fetch(); err != nil {
 		return fmt.Errorf("fetch: %w", err)
@@ -55,7 +55,7 @@ type UpdateReadme struct {
 }
 
 func (p UpdateReadme) Run(ctx context.Context, s *state.Review) error {
-	updated, err := p.DocsWriter.UpdateReadme(ctx, s.Job, s.Result, s.Handle.Sink())
+	updated, err := p.DocsWriter.UpdateReadme(ctx, s.Job, s.ProjectPath, s.Result, s.Handle.Sink())
 	if err != nil {
 		return fmt.Errorf("update readme: %w", err)
 	}

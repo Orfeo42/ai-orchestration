@@ -3,18 +3,29 @@ package main
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"strconv"
 	"time"
 
 	"ai-orchestration/internal/control"
+	"ai-orchestration/internal/forgejo"
+	"ai-orchestration/internal/models"
+	"ai-orchestration/internal/queue"
 	"ai-orchestration/internal/runstore"
 )
+
+var errRunNotRetryable = errors.New("run is not in a retryable state")
+var errRunMissingPayload = errors.New("run has no stored job payload")
+var errRunUnknownService = errors.New("run has unknown service")
+var errRunRebuildUnavailable = errors.New("forgejo client unavailable; cannot rebuild legacy run payload")
 
 type apiHandler struct {
 	store runstore.Store
 	ctrl  control.Channel
+	rq    queue.Queue
+	fj    forgejo.Forgejo
 }
 
 func (h *apiHandler) listRuns(w http.ResponseWriter, r *http.Request) {
@@ -130,6 +141,134 @@ func (h *apiHandler) getDailyTokens(w http.ResponseWriter, r *http.Request) {
 		"to":    to.Format("2006-01-02"),
 		"daily": totals,
 	})
+}
+
+func (h *apiHandler) retryRun(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	run, err := h.store.Get(r.Context(), id)
+	if errors.Is(err, runstore.ErrNotFound) {
+		writeError(w, http.StatusNotFound, err)
+		return
+	}
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err)
+		return
+	}
+	if run.Phase != runstore.PhaseFailed && run.Phase != runstore.PhaseCancelled {
+		writeError(w, http.StatusConflict, errRunNotRetryable)
+		return
+	}
+	queueName, ok := queueForService(run.Service)
+	if !ok {
+		writeError(w, http.StatusBadRequest, errRunUnknownService)
+		return
+	}
+
+	payload := run.JobPayload
+	if len(payload) == 0 {
+		if h.fj == nil {
+			writeError(w, http.StatusUnprocessableEntity, errRunRebuildUnavailable)
+			return
+		}
+		rebuilt, rerr := h.rebuildPayload(run)
+		if rerr != nil {
+			writeError(w, http.StatusUnprocessableEntity, rerr)
+			return
+		}
+		payload = rebuilt
+		if err := h.store.Update(r.Context(), id, func(rn *runstore.Run) {
+			rn.JobPayload = payload
+		}); err != nil {
+			slog.WarnContext(r.Context(), "persist rebuilt payload failed",
+				"run", id,
+				"error", err,
+			)
+		}
+	}
+
+	if err := h.rq.Push(r.Context(), queueName, payload); err != nil {
+		writeError(w, http.StatusInternalServerError, err)
+		return
+	}
+	slog.InfoContext(r.Context(), "retry enqueued",
+		"run", id,
+		"service", string(run.Service),
+		"queue", queueName,
+	)
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (h *apiHandler) rebuildPayload(run runstore.Run) (json.RawMessage, error) {
+	switch run.Service {
+	case runstore.ServiceAssess:
+		if run.IssueNumber == 0 {
+			return nil, errors.New("rebuild assess: missing issue_number")
+		}
+		issue, err := h.fj.GetIssue(run.RepoOwner, run.RepoName, run.IssueNumber)
+		if err != nil {
+			return nil, fmt.Errorf("rebuild assess: %w", err)
+		}
+		return json.Marshal(models.AssessJob{
+			RepoOwner:   run.RepoOwner,
+			RepoName:    run.RepoName,
+			IssueNumber: run.IssueNumber,
+			IssueTitle:  issue.Title,
+			IssueBody:   issue.Body,
+			Project:     run.Project,
+			Labels:      issue.Labels,
+		})
+	case runstore.ServiceImpl:
+		if run.IssueNumber == 0 {
+			return nil, errors.New("rebuild impl: missing issue_number")
+		}
+		issue, err := h.fj.GetIssue(run.RepoOwner, run.RepoName, run.IssueNumber)
+		if err != nil {
+			return nil, fmt.Errorf("rebuild impl: %w", err)
+		}
+		return json.Marshal(models.ImplJob{
+			RepoOwner:   run.RepoOwner,
+			RepoName:    run.RepoName,
+			IssueNumber: run.IssueNumber,
+			IssueTitle:  issue.Title,
+			IssueBody:   issue.Body,
+			Project:     run.Project,
+		})
+	case runstore.ServiceReview:
+		if run.PRNumber == 0 {
+			return nil, errors.New("rebuild review: missing pr_number")
+		}
+		pr, err := h.fj.GetPR(run.RepoOwner, run.RepoName, run.PRNumber)
+		if err != nil {
+			return nil, fmt.Errorf("rebuild review: get pr: %w", err)
+		}
+		diff, err := h.fj.GetPRDiff(run.RepoOwner, run.RepoName, run.PRNumber)
+		if err != nil {
+			return nil, fmt.Errorf("rebuild review: get diff: %w", err)
+		}
+		return json.Marshal(models.ReviewJob{
+			RepoOwner:   run.RepoOwner,
+			RepoName:    run.RepoName,
+			PRNumber:    run.PRNumber,
+			PRTitle:     pr.Title,
+			PRBranch:    pr.Branch,
+			Project:     run.Project,
+			IssueNumber: run.IssueNumber,
+			Diff:        diff,
+		})
+	}
+	return nil, errRunUnknownService
+}
+
+func queueForService(s runstore.Service) (string, bool) {
+	switch s {
+	case runstore.ServiceAssess:
+		return queue.QueueAssess, true
+	case runstore.ServiceImpl:
+		return queue.QueueImpl, true
+	case runstore.ServiceReview:
+		return queue.QueueReview, true
+	}
+	return "", false
 }
 
 func (h *apiHandler) healthz(w http.ResponseWriter, _ *http.Request) {

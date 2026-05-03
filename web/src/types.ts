@@ -73,3 +73,19 @@ export interface DailyTokensResponse {
   to: string;
   daily: Record<string, TokenUsage>;
 }
+
+export type FileStatus = "added" | "deleted" | "modified" | "renamed";
+
+export interface FileDiff {
+  path: string;
+  old_path?: string;
+  status: FileStatus;
+  patch: string;
+  additions: number;
+  deletions: number;
+}
+
+export interface RunDiffResponse {
+  pr_number: number;
+  files: FileDiff[];
+}

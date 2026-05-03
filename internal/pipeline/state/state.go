@@ -9,12 +9,13 @@ import (
 )
 
 type Assess struct {
-	Job      models.AssessJob
-	Proj     projects.Config
-	Handle   *runstore.RunHandle
-	Issue    models.ForgejoIssue
-	Comments []models.IssueComment
-	Result   agent.AssessResult
+	Job         models.AssessJob
+	Proj        projects.Config
+	Handle      *runstore.RunHandle
+	Issue       models.ForgejoIssue
+	Comments    []models.IssueComment
+	Result      agent.AssessResult
+	ProjectPath string
 }
 
 type Impl struct {
@@ -30,11 +31,14 @@ type Impl struct {
 	Comments      []models.IssueComment
 	FreshComments []models.IssueComment
 	ImplOutput    string
+	ProjectPath   string
 }
 
 type Review struct {
-	Job    models.ReviewJob
-	Handle *runstore.RunHandle
-	Result models.ReviewResult
-	Git    gitops.Git
+	Job         models.ReviewJob
+	Handle      *runstore.RunHandle
+	Result      models.ReviewResult
+	Git         gitops.Git
+	ProjectPath string
+	Proj        projects.Config
 }

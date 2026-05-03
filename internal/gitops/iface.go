@@ -3,6 +3,7 @@ package gitops
 //go:generate moq -out mock.go . Git:MockGit
 
 type Git interface {
+	EnsureRepo() error
 	CreateBranch(branch string) error
 	Checkout(branch string) error
 	Fetch() error

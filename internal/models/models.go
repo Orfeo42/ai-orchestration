@@ -53,7 +53,7 @@ type ReviewJob struct {
 	PRNumber    int    `json:"pr_number"`
 	PRTitle     string `json:"pr_title"`
 	PRBranch    string `json:"pr_branch"`
-	ProjectPath string `json:"project_path"`
+	Project     string `json:"project"`
 	IssueNumber int    `json:"issue_number"`
 	Diff        string `json:"diff"`
 }

@@ -16,6 +16,7 @@ type config struct {
 	redisURL      string
 	projects      map[string]projects.Config
 	projectsRoot  string
+	workerID      string
 	claudeTimeout time.Duration
 	gitUserName   string
 	gitUserEmail  string
@@ -28,6 +29,11 @@ func loadConfig() (config, error) {
 	cfg.forgejoToken = mustEnv("FORGEJO_TOKEN")
 	cfg.redisURL = envOr("REDIS_URL", "redis://redis:6379")
 	cfg.projectsRoot = envOr("PROJECTS_ROOT", projects.DefaultRoot)
+	workerID, err := resolveWorkerID()
+	if err != nil {
+		return cfg, fmt.Errorf("resolve worker id: %w", err)
+	}
+	cfg.workerID = workerID
 	cfg.gitUserName = envOr("GIT_USER_NAME", "AI Orchestrator")
 	cfg.gitUserEmail = envOr("GIT_USER_EMAIL", "ai@orchestrator.local")
 	if v := os.Getenv("GEMINI_API_KEY"); v != "" {
@@ -65,4 +71,18 @@ func envOr(key, def string) string {
 		return v
 	}
 	return def
+}
+
+func resolveWorkerID() (string, error) {
+	if v := os.Getenv("WORKER_ID"); v != "" {
+		return v, nil
+	}
+	host, err := os.Hostname()
+	if err != nil {
+		return "", err
+	}
+	if host == "" {
+		return "", fmt.Errorf("hostname is empty")
+	}
+	return host, nil
 }
