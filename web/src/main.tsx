@@ -5,18 +5,21 @@ import App from "./App";
 import RunList from "./pages/RunList";
 import RunDetail from "./pages/RunDetail";
 import Tokens from "./pages/Tokens";
+import { ThemeProvider } from "./lib/theme";
 import "./styles.css";
 
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
-    <HashRouter>
-      <Routes>
-        <Route path="/" element={<App />}>
-          <Route index element={<RunList />} />
-          <Route path="runs/:id" element={<RunDetail />} />
-          <Route path="tokens" element={<Tokens />} />
-        </Route>
-      </Routes>
-    </HashRouter>
+    <ThemeProvider>
+      <HashRouter>
+        <Routes>
+          <Route path="/" element={<App />}>
+            <Route index element={<RunList />} />
+            <Route path="runs/:id" element={<RunDetail />} />
+            <Route path="tokens" element={<Tokens />} />
+          </Route>
+        </Routes>
+      </HashRouter>
+    </ThemeProvider>
   </React.StrictMode>,
 );

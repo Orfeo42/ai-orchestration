@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useParams } from "react-router-dom";
 import { Send, Square, RotateCw, Wifi, WifiOff } from "lucide-react";
 import EventLog from "@/components/EventLog";
+import DiffView from "@/components/DiffView";
 import { cancelRun, injectNote, retryRun } from "@/api";
 import { useRunStream } from "@/ws";
 import { phaseLabel, phaseVariant, isTerminal } from "@/lib/phase";
@@ -16,6 +17,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
 
 function StatCard({
@@ -213,17 +215,40 @@ export default function RunDetail() {
         </CardContent>
       </Card>
 
-      <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="text-base">Activity</CardTitle>
-          <CardDescription>
-            Live stream of Claude/Gemini events for this run.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <EventLog events={events} />
-        </CardContent>
-      </Card>
+      <Tabs defaultValue="activity" className="w-full">
+        <TabsList>
+          <TabsTrigger value="activity">Activity</TabsTrigger>
+          <TabsTrigger value="diff">
+            Diff{run?.pr_number ? ` · #${run.pr_number}` : ""}
+          </TabsTrigger>
+        </TabsList>
+        <TabsContent value="activity">
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base">Activity</CardTitle>
+              <CardDescription>
+                Live stream of Claude/Gemini events for this run.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <EventLog events={events} />
+            </CardContent>
+          </Card>
+        </TabsContent>
+        <TabsContent value="diff">
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base">Modified files</CardTitle>
+              <CardDescription>
+                File changes from the PR opened by this run.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <DiffView runId={id} prNumber={run?.pr_number} />
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }

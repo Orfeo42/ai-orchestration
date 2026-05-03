@@ -52,11 +52,24 @@ export function useRunStream(runId: string | undefined): RunStream {
             break;
           case "event":
             if (frame.event) {
-              setEvents((prev) => [...prev, frame.event!]);
+              setEvents((prev) => {
+                const incoming = frame.event!;
+                if (
+                  prev.length > 0 &&
+                  incoming.id &&
+                  prev[prev.length - 1].id === incoming.id
+                ) {
+                  return prev;
+                }
+                return [...prev, incoming];
+              });
             }
             break;
           case "run_update":
-            if (frame.run) setRun(frame.run);
+            if (frame.run) {
+              const next = frame.run;
+              setRun((cur) => (runEqual(cur, next) ? cur : next));
+            }
             break;
           case "error":
             setError(frame.error ?? "unknown error");
@@ -90,4 +103,20 @@ export function useRunStream(runId: string | undefined): RunStream {
   }, [runId]);
 
   return { run, events, connected, error };
+}
+
+function runEqual(a: Run | null, b: Run): boolean {
+  if (!a) return false;
+  return (
+    a.id === b.id &&
+    a.phase === b.phase &&
+    a.attempt === b.attempt &&
+    a.title === b.title &&
+    a.pr_number === b.pr_number &&
+    a.issue_number === b.issue_number &&
+    a.usage.input === b.usage.input &&
+    a.usage.output === b.usage.output &&
+    a.usage.cache_read_input === b.usage.cache_read_input &&
+    a.usage.cache_creation_input === b.usage.cache_creation_input
+  );
 }

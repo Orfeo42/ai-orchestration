@@ -1,5 +1,6 @@
 import type { RunEvent } from "@/types";
 import { Badge } from "@/components/ui/badge";
+import Markdown from "@/components/Markdown";
 import { cn } from "@/lib/utils";
 
 interface Props {
@@ -100,16 +101,13 @@ function renderBody(evt: RunEvent) {
           </span>
         );
       }
-      return (
-        <pre className="whitespace-pre-wrap break-words font-sans text-sm">
-          {evt.result_text}
-        </pre>
-      );
+      return <Markdown text={evt.result_text ?? ""} />;
     case "inject":
       return (
-        <em className="whitespace-pre-wrap break-words text-muted-foreground">
-          injected: {evt.text}
-        </em>
+        <div className="text-muted-foreground">
+          <em className="mr-1">injected:</em>
+          <Markdown text={evt.text ?? ""} className="inline" />
+        </div>
       );
     case "cancel":
       return <em className="text-destructive">cancelled by user</em>;
@@ -122,10 +120,6 @@ function renderBody(evt: RunEvent) {
     case "assistant_text":
     case "thinking":
     default:
-      return (
-        <pre className="whitespace-pre-wrap break-words font-sans text-sm">
-          {evt.text}
-        </pre>
-      );
+      return <Markdown text={evt.text ?? ""} />;
   }
 }
