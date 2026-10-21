@@ -1,122 +1,132 @@
 import { useEffect, useRef, useState } from "react";
-import type { Run, RunEvent } from "./types";
+import type { StepRun } from "./process-types";
+import type { RunEvent } from "./types";
+
+const FRAME_TYPES: readonly string[] = [
+  "hello",
+  "event",
+  "run_update",
+  "bye",
+  "error",
+];
 
 interface WSFrame {
   type: "hello" | "event" | "run_update" | "bye" | "error";
-  run?: Run;
+  step_run?: StepRun;
   event?: RunEvent;
   last_seq?: number;
   error?: string;
 }
 
-export interface RunStream {
-  run: Run | null;
+export interface StepRunStream {
+  stepRun: StepRun | null;
   events: RunEvent[];
   connected: boolean;
   error: string | null;
 }
 
-function wsUrl(runId: string): string {
-  const proto = window.location.protocol === "https:" ? "wss" : "ws";
-  return `${proto}://${window.location.host}/ws/runs/${runId}`;
+function isFrame(value: unknown): value is WSFrame {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    "type" in value &&
+    typeof value.type === "string" &&
+    FRAME_TYPES.includes(value.type)
+  );
 }
 
-export function useRunStream(runId: string | undefined): RunStream {
-  const [run, setRun] = useState<Run | null>(null);
+function wsUrl(stepRunId: string): string {
+  const proto = window.location.protocol === "https:" ? "wss" : "ws";
+  return `${proto}://${window.location.host}/ws/step-runs/${encodeURIComponent(stepRunId)}`;
+}
+
+function appendEvent(prev: RunEvent[], incoming: RunEvent): RunEvent[] {
+  const last = prev.at(-1);
+  if (last?.id !== undefined && last.id === incoming.id) return prev;
+  return [...prev, incoming];
+}
+
+export function useStepRunStream(stepRunId: string | undefined): StepRunStream {
+  const [stepRun, setStepRun] = useState<StepRun | null>(null);
   const [events, setEvents] = useState<RunEvent[]>([]);
   const [connected, setConnected] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const reconnectAttempt = useRef(0);
 
   useEffect(() => {
-    if (!runId) return;
+    if (stepRunId === undefined) return;
     let ws: WebSocket | null = null;
     let cancelled = false;
+    let finished = false;
     let reconnectTimer: number | null = null;
 
-    function connect() {
-      ws = new WebSocket(wsUrl(runId!));
+    function handleFrame(frame: WSFrame): void {
+      switch (frame.type) {
+        case "hello":
+          if (frame.step_run) setStepRun(frame.step_run);
+          setEvents([]);
+          break;
+        case "event": {
+          const incoming = frame.event;
+          if (incoming) setEvents((prev) => appendEvent(prev, incoming));
+          break;
+        }
+        case "run_update":
+          if (frame.step_run) setStepRun(frame.step_run);
+          break;
+        case "error":
+          setError(frame.error ?? "unknown error");
+          break;
+        case "bye":
+          finished = true;
+          ws?.close();
+          break;
+      }
+    }
 
-      ws.onopen = () => {
+    function connect(id: string): void {
+      const socket = new WebSocket(wsUrl(id));
+      ws = socket;
+
+      socket.onopen = () => {
         setConnected(true);
         setError(null);
         reconnectAttempt.current = 0;
       };
 
-      ws.onmessage = (evt) => {
-        const frame = JSON.parse(evt.data) as WSFrame;
-        switch (frame.type) {
-          case "hello":
-            if (frame.run) setRun(frame.run);
-            setEvents([]);
-            break;
-          case "event":
-            if (frame.event) {
-              setEvents((prev) => {
-                const incoming = frame.event!;
-                if (
-                  prev.length > 0 &&
-                  incoming.id &&
-                  prev[prev.length - 1].id === incoming.id
-                ) {
-                  return prev;
-                }
-                return [...prev, incoming];
-              });
-            }
-            break;
-          case "run_update":
-            if (frame.run) {
-              const next = frame.run;
-              setRun((cur) => (runEqual(cur, next) ? cur : next));
-            }
-            break;
-          case "error":
-            setError(frame.error ?? "unknown error");
-            break;
-          case "bye":
-            ws?.close();
-            break;
+      socket.onmessage = (evt: MessageEvent<unknown>) => {
+        if (typeof evt.data !== "string") return;
+        try {
+          const parsed: unknown = JSON.parse(evt.data);
+          if (isFrame(parsed)) handleFrame(parsed);
+        } catch {
+          setError("invalid frame");
         }
       };
 
-      ws.onclose = () => {
+      socket.onclose = () => {
         setConnected(false);
-        if (cancelled) return;
+        if (cancelled || finished) return;
         reconnectAttempt.current += 1;
         const delay = Math.min(30000, 500 * 2 ** reconnectAttempt.current);
-        reconnectTimer = window.setTimeout(connect, delay);
+        reconnectTimer = window.setTimeout(() => {
+          connect(id);
+        }, delay);
       };
 
-      ws.onerror = () => {
+      socket.onerror = () => {
         setError("websocket error");
       };
     }
 
-    connect();
+    connect(stepRunId);
 
     return () => {
       cancelled = true;
       if (reconnectTimer !== null) window.clearTimeout(reconnectTimer);
       ws?.close();
     };
-  }, [runId]);
+  }, [stepRunId]);
 
-  return { run, events, connected, error };
-}
-
-function runEqual(a: Run | null, b: Run): boolean {
-  if (!a) return false;
-  return (
-    a.id === b.id &&
-    a.phase === b.phase &&
-    a.attempt === b.attempt &&
-    a.title === b.title &&
-    a.pr_number === b.pr_number &&
-    a.issue_number === b.issue_number &&
-    a.usage.input === b.usage.input &&
-    a.usage.output === b.usage.output &&
-    a.usage.cache_read_input === b.usage.cache_read_input &&
-    a.usage.cache_creation_input === b.usage.cache_creation_input
-  );
+  return { stepRun, events, connected, error };
 }

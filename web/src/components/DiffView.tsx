@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import {
   ChevronDown,
   ChevronRight,
@@ -7,21 +7,16 @@ import {
   FileMinus,
   FilePen,
 } from "lucide-react";
-import { getRunDiff } from "@/api";
+import { useStepRunDiff } from "@/queries";
 import type { FileDiff, FileStatus } from "@/types";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import {
-  Tabs,
-  TabsList,
-  TabsTrigger,
-} from "@/components/ui/tabs";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
 
-interface Props {
-  runId: string;
-  prNumber?: number;
-}
+type Props = {
+  stepRunId: string;
+};
 
 type ViewMode = "unified" | "split";
 
@@ -39,75 +34,52 @@ const statusColor: Record<FileStatus, string> = {
   renamed: "text-amber-500",
 };
 
-export default function DiffView({ runId, prNumber }: Props) {
-  const [files, setFiles] = useState<FileDiff[] | null>(null);
-  const [pr, setPR] = useState(0);
-  const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
+function isViewMode(value: string): value is ViewMode {
+  return value === "unified" || value === "split";
+}
+
+export function DiffView({ stepRunId }: Props) {
+  const diff = useStepRunDiff(stepRunId);
   const [view, setView] = useState<ViewMode>("unified");
   const [openMap, setOpenMap] = useState<Record<string, boolean>>({});
 
-  useEffect(() => {
-    let cancelled = false;
-    setLoading(true);
-    setError(null);
-    getRunDiff(runId)
-      .then((res) => {
-        if (cancelled) return;
-        setFiles(res.files);
-        setPR(res.pr_number);
-        const init: Record<string, boolean> = {};
-        for (const f of res.files) init[f.path] = true;
-        setOpenMap(init);
-      })
-      .catch((e) => {
-        if (cancelled) return;
-        setError(String(e));
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [runId, prNumber]);
+  const files = useMemo(() => diff.data?.files ?? [], [diff.data]);
+  const pr = diff.data?.pr_number ?? 0;
+  const isOpen = (path: string): boolean => openMap[path] ?? true;
+  const allOpen = files.length > 0 && files.every((f) => isOpen(f.path));
 
-  const allOpen = useMemo(() => {
-    if (!files || files.length === 0) return false;
-    return files.every((f) => openMap[f.path]);
-  }, [files, openMap]);
+  function handleView(next: string) {
+    if (isViewMode(next)) setView(next);
+  }
 
   function toggleAll() {
-    if (!files) return;
     const next: Record<string, boolean> = {};
     for (const f of files) next[f.path] = !allOpen;
     setOpenMap(next);
   }
 
-  function setOpen(path: string, open: boolean) {
-    setOpenMap((m) => ({ ...m, [path]: open }));
+  function toggleFile(path: string) {
+    setOpenMap((m) => ({ ...m, [path]: !(m[path] ?? true) }));
   }
 
-  if (loading && !files) {
+  if (diff.isPending) {
     return (
       <div className="rounded-md border border-dashed py-10 text-center text-sm text-muted-foreground">
         Loading diff...
       </div>
     );
   }
-  if (error) {
+  if (diff.error) {
     return (
       <div className="rounded-md border border-destructive/40 bg-destructive/5 p-4 text-sm text-destructive">
-        {error}
+        {diff.error.message}
       </div>
     );
   }
-  if (!files || files.length === 0) {
+  if (files.length === 0) {
     return (
       <div className="rounded-md border border-dashed py-10 text-center text-sm text-muted-foreground">
-        {pr === 0
-          ? "No PR associated with this run yet."
-          : "No file changes."}
+        {pr === 0 ? "No PR associated with this step yet." : "No file changes."}
       </div>
     );
   }
@@ -116,10 +88,10 @@ export default function DiffView({ runId, prNumber }: Props) {
       <div className="flex flex-wrap items-center gap-2">
         <span className="text-xs text-muted-foreground">
           {files.length} file{files.length === 1 ? "" : "s"} changed
-          {pr ? ` · PR #${pr}` : ""}
+          {pr ? ` · PR #${String(pr)}` : ""}
         </span>
         <div className="ml-auto flex items-center gap-2">
-          <Tabs value={view} onValueChange={(v) => setView(v as ViewMode)}>
+          <Tabs value={view} onValueChange={handleView}>
             <TabsList className="h-8">
               <TabsTrigger value="unified" className="text-xs">
                 Unified
@@ -154,23 +126,25 @@ export default function DiffView({ runId, prNumber }: Props) {
           key={f.path}
           file={f}
           view={view}
-          open={openMap[f.path] ?? true}
-          onToggle={() => setOpen(f.path, !(openMap[f.path] ?? true))}
+          open={isOpen(f.path)}
+          onToggle={() => {
+            toggleFile(f.path);
+          }}
         />
       ))}
     </div>
   );
 }
 
-interface FileBlockProps {
+type FileBlockProps = {
   file: FileDiff;
   view: ViewMode;
   open: boolean;
   onToggle: () => void;
-}
+};
 
 function FileBlock({ file, view, open, onToggle }: FileBlockProps) {
-  const Icon = statusIcon[file.status] ?? FileIcon;
+  const Icon = statusIcon[file.status];
   return (
     <div className="overflow-hidden rounded-md border">
       <button
@@ -226,10 +200,7 @@ function renderUnified(patch: string) {
       cls = "bg-destructive/10 text-destructive";
     }
     return (
-      <div
-        key={i}
-        className={cn("whitespace-pre-wrap break-all px-3", cls)}
-      >
+      <div key={i} className={cn("whitespace-pre-wrap break-all px-3", cls)}>
         {line || " "}
       </div>
     );
@@ -273,10 +244,7 @@ function renderSplit(patch: string) {
           if (row.kind === "hunk") {
             return (
               <tr key={i} className="bg-sky-500/10 text-sky-500">
-                <td
-                  colSpan={4}
-                  className="whitespace-pre-wrap break-all px-3"
-                >
+                <td colSpan={4} className="whitespace-pre-wrap break-all px-3">
                   {row.hunkText}
                 </td>
               </tr>
@@ -299,22 +267,14 @@ function renderSplit(patch: string) {
               <td className="select-none border-r px-2 text-right text-muted-foreground">
                 {row.oldNum ?? ""}
               </td>
-              <td
-                className={cn(
-                  "whitespace-pre-wrap break-all px-3",
-                  leftCls,
-                )}
-              >
+              <td className={cn("whitespace-pre-wrap break-all px-3", leftCls)}>
                 {row.oldText ?? " "}
               </td>
               <td className="select-none border-l border-r px-2 text-right text-muted-foreground">
                 {row.newNum ?? ""}
               </td>
               <td
-                className={cn(
-                  "whitespace-pre-wrap break-all px-3",
-                  rightCls,
-                )}
+                className={cn("whitespace-pre-wrap break-all px-3", rightCls)}
               >
                 {row.newText ?? " "}
               </td>
@@ -369,8 +329,8 @@ function buildSplitRows(patch: string): SplitRow[] {
       flushChanges();
       const m = /^@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@/.exec(line);
       if (m) {
-        oldNum = parseInt(m[1], 10);
-        newNum = parseInt(m[2], 10);
+        oldNum = parseInt(m[1] ?? "0", 10);
+        newNum = parseInt(m[2] ?? "0", 10);
       }
       rows.push({ kind: "hunk", hunkText: line });
       continue;

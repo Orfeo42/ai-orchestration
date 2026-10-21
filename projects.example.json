@@ -1,0 +1,22 @@
+{
+  "billing-backend": {
+    "repo": "ionstream/billing-backend",
+    "base_branch": "develop",
+    "label": "repo/billing-BE"
+  },
+  "billing-admin": {
+    "repo": "ionstream/billing-admin",
+    "base_branch": "main",
+    "label": "repo/billing-FE"
+  },
+  "orchestration-backend": {
+    "repo": "ionstream/orchestration-backend",
+    "base_branch": "develop",
+    "label": "repo/orch-BE"
+  },
+  "orchestration-frontend": {
+    "repo": "ionstream/orchestration-frontend",
+    "base_branch": "main",
+    "label": "repo/orch-FE"
+  }
+}

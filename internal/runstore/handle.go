@@ -6,8 +6,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/google/uuid"
-
 	"ai-orchestration/internal/control"
 	"ai-orchestration/internal/events"
 	"ai-orchestration/internal/models"
@@ -16,39 +14,27 @@ import (
 type RunHandle struct {
 	id           string
 	sink         events.Sink
-	store        Store
+	persist      persister
 	ctx          context.Context
 	cancel       context.CancelFunc
 	notesMu      sync.Mutex
 	notes        []string
 	seenComments map[int64]time.Time
+	interruptMu  sync.Mutex
+	interruptGen int
+	interrupt    context.CancelFunc
 }
 
-func NewRunHandle(ctx context.Context, store Store, ctrl control.Channel, initial Run) *RunHandle {
-	if initial.ID == "" {
-		initial.ID = uuid.NewString()
-	}
-	if initial.StartedAt.IsZero() {
-		initial.StartedAt = time.Now().UTC()
-	}
-
-	h := &RunHandle{
-		id:           initial.ID,
+func newHandle(id string) *RunHandle {
+	return &RunHandle{
+		id:           id,
 		sink:         events.NoopSink{},
+		persist:      nopPersister{},
 		seenComments: map[int64]time.Time{},
 	}
+}
 
-	if store != nil {
-		if err := store.Create(ctx, initial); err != nil {
-			slog.WarnContext(ctx, "create run failed",
-				"error", err,
-			)
-		} else {
-			h.store = store
-			h.sink = store.AppendSink(h.id)
-		}
-	}
-
+func (h *RunHandle) start(ctx context.Context, ctrl control.Channel, service Service) {
 	runCtx, cancel := context.WithCancel(ctx)
 	h.ctx = runCtx
 	h.cancel = cancel
@@ -57,8 +43,8 @@ func NewRunHandle(ctx context.Context, store Store, ctrl control.Channel, initia
 		sub, err := ctrl.Subscribe(runCtx, h.id)
 		if err != nil {
 			slog.WarnContext(ctx, "ctrl subscribe failed",
-				"run", h.id,
-				"error", err,
+				slog.String("run", h.id),
+				slog.String("error", err.Error()),
 			)
 		} else {
 			go h.handleControl(runCtx, sub)
@@ -67,81 +53,60 @@ func NewRunHandle(ctx context.Context, store Store, ctrl control.Channel, initia
 
 	h.Emit(runCtx, events.Event{
 		Kind:    events.KindRunStart,
-		Service: string(initial.Service),
+		Service: string(service),
 	})
-
-	return h
 }
 
-func (h *RunHandle) ID() string            { return h.id }
-func (h *RunHandle) Sink() events.Sink     { return h.sink }
-func (h *RunHandle) Ctx() context.Context  { return h.ctx }
-func (h *RunHandle) Cancel()               { h.cancel() }
-func (h *RunHandle) Store() Store          { return h.store }
+func (h *RunHandle) ID() string           { return h.id }
+func (h *RunHandle) Sink() events.Sink    { return h.sink }
+func (h *RunHandle) Ctx() context.Context { return h.ctx }
+func (h *RunHandle) Cancel()              { h.cancel() }
 
 func (h *RunHandle) Emit(ctx context.Context, evt events.Event) {
-	if h.sink == nil {
-		return
-	}
 	if err := h.sink.Emit(ctx, evt); err != nil {
 		slog.WarnContext(ctx, "sink emit failed",
-			"error", err,
+			slog.String("run", h.id),
+			slog.String("error", err.Error()),
 		)
 	}
 }
 
 func (h *RunHandle) SetPhase(ctx context.Context, phase Phase) {
-	if h.store != nil {
-		if err := h.store.Update(ctx, h.id, func(r *Run) {
-			r.Phase = phase
-		}); err != nil {
-			slog.WarnContext(ctx, "update phase failed",
-				"run", h.id,
-				"error", err,
-			)
-		}
+	if err := h.persist.setPhase(ctx, phase); err != nil {
+		slog.WarnContext(ctx, "update phase failed",
+			slog.String("run", h.id),
+			slog.String("error", err.Error()),
+		)
 	}
 	h.Emit(ctx, events.Event{Kind: events.KindPhase, Phase: string(phase)})
 }
 
 func (h *RunHandle) AddUsage(ctx context.Context, u events.TokenUsage) {
-	if h.store == nil {
-		return
-	}
-	if err := h.store.Update(ctx, h.id, func(r *Run) {
-		r.Usage = r.Usage.Add(u)
-	}); err != nil {
+	if err := h.persist.addUsage(ctx, u); err != nil {
 		slog.WarnContext(ctx, "update usage failed",
-			"run", h.id,
-			"error", err,
+			slog.String("run", h.id),
+			slog.String("error", err.Error()),
 		)
 	}
 }
 
 func (h *RunHandle) SetSession(ctx context.Context, sessionID string) {
-	if h.store == nil || sessionID == "" {
+	if sessionID == "" {
 		return
 	}
-	if err := h.store.Update(ctx, h.id, func(r *Run) {
-		r.ClaudeSession = sessionID
-	}); err != nil {
+	if err := h.persist.setSession(ctx, sessionID); err != nil {
 		slog.WarnContext(ctx, "update session failed",
-			"run", h.id,
-			"error", err,
+			slog.String("run", h.id),
+			slog.String("error", err.Error()),
 		)
 	}
 }
 
 func (h *RunHandle) SetAttempt(ctx context.Context, attempt int) {
-	if h.store == nil {
-		return
-	}
-	if err := h.store.Update(ctx, h.id, func(r *Run) {
-		r.Attempt = attempt
-	}); err != nil {
+	if err := h.persist.setAttempt(ctx, attempt); err != nil {
 		slog.WarnContext(ctx, "update attempt failed",
-			"run", h.id,
-			"error", err,
+			slog.String("run", h.id),
+			slog.String("error", err.Error()),
 		)
 	}
 }
@@ -191,17 +156,14 @@ func (h *RunHandle) PrependNotes(notes []string) {
 }
 
 func (h *RunHandle) Finalize(ctx context.Context, phase Phase, finalErr error) {
-	if h.store == nil {
-		return
-	}
 	errStr := ""
 	if finalErr != nil {
 		errStr = finalErr.Error()
 	}
-	if err := h.store.Finalize(ctx, h.id, phase, errStr); err != nil {
+	if err := h.persist.finalize(ctx, phase, errStr); err != nil {
 		slog.WarnContext(ctx, "finalize run failed",
-			"run", h.id,
-			"error", err,
+			slog.String("run", h.id),
+			slog.String("error", err.Error()),
 		)
 	}
 	h.Emit(ctx, events.Event{Kind: events.KindRunEnd, Phase: string(phase)})
@@ -211,8 +173,8 @@ func (h *RunHandle) handleControl(ctx context.Context, sub control.Subscription)
 	defer func() {
 		if err := sub.Close(); err != nil {
 			slog.WarnContext(ctx, "ctrl subscription close failed",
-				"run", h.id,
-				"error", err,
+				slog.String("run", h.id),
+				slog.String("error", err.Error()),
 			)
 		}
 	}()
@@ -232,8 +194,7 @@ func (h *RunHandle) handleControl(ctx context.Context, sub control.Subscription)
 			case control.TypeInject:
 				h.AppendNote(msg.Note)
 				h.Emit(ctx, events.Event{Kind: events.KindInject, Text: msg.Note})
-				h.cancel()
-				return
+				h.interruptCurrent()
 			}
 		}
 	}

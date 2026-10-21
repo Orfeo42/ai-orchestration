@@ -1,8 +1,12 @@
 package agent
 
 import (
+	"slices"
 	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"ai-orchestration/internal/models"
 )
@@ -166,5 +170,22 @@ func TestLogEvent(t *testing.T) {
 
 	t.Run("tool_result string no panic", func(t *testing.T) {
 		logEvent(`{"type":"tool_result","content":"some result"}`)
+	})
+}
+
+func TestBaseArgs(t *testing.T) {
+	t.Run("without system prompt file", func(t *testing.T) {
+		got := baseArgs(Runtime{}, "Bash,Read")
+		assert.NotContains(t, got, "--append-system-prompt-file")
+		idx := slices.Index(got, "--allowedTools")
+		require.NotEqual(t, -1, idx)
+		assert.Equal(t, "Bash,Read", got[idx+1])
+	})
+
+	t.Run("with system prompt file", func(t *testing.T) {
+		got := baseArgs(Runtime{SystemPromptFile: "/tmp/headless.md"}, "Bash,Read")
+		idx := slices.Index(got, "--append-system-prompt-file")
+		require.NotEqual(t, -1, idx)
+		assert.Equal(t, "/tmp/headless.md", got[idx+1])
 	})
 }

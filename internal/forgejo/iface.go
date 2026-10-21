@@ -2,7 +2,7 @@ package forgejo
 
 import "ai-orchestration/internal/models"
 
-//go:generate moq -out mock.go . Forgejo:MockForgejo
+//go:generate moq -rm -out mock.go . Forgejo:MockForgejo
 
 type Forgejo interface {
 	GetIssues(owner, repo, label string, assignee *string) ([]models.ForgejoIssue, error)
@@ -17,6 +17,7 @@ type Forgejo interface {
 	GetPR(owner, repo string, prNumber int) (PRDetails, error)
 	GetPRDiff(owner, repo string, prNumber int) (string, error)
 	CreatePRReview(owner, repo string, prNumber int, body string, approved bool) error
+	CurrentUser() (string, error)
 }
 
 type PRDetails struct {

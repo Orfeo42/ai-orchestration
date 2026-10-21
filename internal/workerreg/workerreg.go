@@ -12,9 +12,9 @@ import (
 )
 
 const (
-	keyPrefix       = "worker:"
-	defaultTTL      = 30 * time.Second
-	defaultRefresh  = 10 * time.Second
+	keyPrefix      = "worker:"
+	defaultTTL     = 30 * time.Second
+	defaultRefresh = 10 * time.Second
 )
 
 type Registry struct {

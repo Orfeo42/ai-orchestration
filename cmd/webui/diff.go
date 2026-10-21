@@ -1,57 +1,47 @@
 package main
 
 import (
-	"errors"
+	"log/slog"
 	"net/http"
 	"strings"
 
-	"ai-orchestration/internal/runstore"
+	"ai-orchestration/internal/forgejo"
 )
 
-var errRunNoPR = errors.New("run has no associated PR")
-var errForgejoUnavailable = errors.New("forgejo client unavailable")
+const errRunNoPR webError = "run has no associated PR"
+const errForgejoUnavailable webError = "forgejo client unavailable"
 
 type fileDiff struct {
-	Path     string `json:"path"`
-	OldPath  string `json:"old_path,omitempty"`
-	Status   string `json:"status"`
-	Patch    string `json:"patch"`
-	Additions int   `json:"additions"`
-	Deletions int   `json:"deletions"`
+	Path      string `json:"path"`
+	OldPath   string `json:"old_path,omitempty"`
+	Status    string `json:"status"`
+	Patch     string `json:"patch"`
+	Additions int    `json:"additions"`
+	Deletions int    `json:"deletions"`
 }
 
-func (h *apiHandler) getRunDiff(w http.ResponseWriter, r *http.Request) {
-	id := r.PathValue("id")
-	run, err := h.store.Get(r.Context(), id)
-	if errors.Is(err, runstore.ErrNotFound) {
-		writeError(w, http.StatusNotFound, err)
-		return
-	}
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, err)
-		return
-	}
-	if run.PRNumber == 0 {
-		writeJSON(w, http.StatusOK, map[string]any{
-			"pr_number": 0,
-			"files":     []fileDiff{},
-		})
-		return
-	}
-	if h.fj == nil {
+type diffResponse struct {
+	PRNumber int        `json:"pr_number"`
+	Files    []fileDiff `json:"files"`
+}
+
+func writePRDiff(w http.ResponseWriter, r *http.Request, fj forgejo.Forgejo, owner, repo string, prNumber int) {
+	if fj == nil {
+		slog.ErrorContext(r.Context(), "forgejo client unavailable")
 		writeError(w, http.StatusServiceUnavailable, errForgejoUnavailable)
 		return
 	}
-	raw, err := h.fj.GetPRDiff(run.RepoOwner, run.RepoName, run.PRNumber)
+	raw, err := fj.GetPRDiff(owner, repo, prNumber)
 	if err != nil {
+		slog.WarnContext(r.Context(), "get pr diff failed",
+			"repo", owner+"/"+repo,
+			"pr", prNumber,
+			"error", err,
+		)
 		writeError(w, http.StatusBadGateway, err)
 		return
 	}
-	files := parseUnifiedDiff(raw)
-	writeJSON(w, http.StatusOK, map[string]any{
-		"pr_number": run.PRNumber,
-		"files":     files,
-	})
+	writeJSON(w, http.StatusOK, diffResponse{PRNumber: prNumber, Files: parseUnifiedDiff(raw)})
 }
 
 func parseUnifiedDiff(raw string) []fileDiff {

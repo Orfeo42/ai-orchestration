@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"time"
 
 	"ai-orchestration/internal/events"
 	"ai-orchestration/internal/models"
@@ -30,12 +29,12 @@ SUGGESTIONS:
 - <non-blocking suggestion, omit section if none>`
 
 type ClaudeReviewer struct {
-	timeout time.Duration
-	cwd     string
+	rt  Runtime
+	cwd string
 }
 
-func NewReviewer(timeout time.Duration, cwd string) *ClaudeReviewer {
-	return &ClaudeReviewer{timeout: timeout, cwd: cwd}
+func NewReviewer(rt Runtime, cwd string) *ClaudeReviewer {
+	return &ClaudeReviewer{rt: rt, cwd: cwd}
 }
 
 func (c *ClaudeReviewer) Review(ctx context.Context, job models.ReviewJob, sink events.Sink) (models.ReviewResult, error) {
@@ -43,17 +42,11 @@ func (c *ClaudeReviewer) Review(ctx context.Context, job models.ReviewJob, sink 
 		"pr_number", job.PRNumber,
 	)
 
-	cctx, cancel := context.WithTimeout(ctx, c.timeout)
+	cctx, cancel := context.WithTimeout(ctx, c.rt.Timeout)
 	defer cancel()
 
 	prompt := fmt.Sprintf(claudeReviewPrompt, job.PRTitle, job.IssueNumber, job.Diff)
-	out, err := runClaudeStream(cctx, c.cwd, prompt, []string{
-		"--print",
-		"--dangerously-skip-permissions",
-		"--output-format", "stream-json",
-		"--verbose",
-		"--allowedTools", "Bash,Read,Glob,Grep",
-	}, sink)
+	out, err := runClaudeStream(cctx, c.cwd, prompt, baseArgs(c.rt, "Bash,Read,Glob,Grep"), sink)
 	if err != nil {
 		return models.ReviewResult{}, fmt.Errorf("claude review: %w", err)
 	}

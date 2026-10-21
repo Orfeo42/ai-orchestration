@@ -10,19 +10,16 @@ import (
 	"time"
 )
 
-// Ensure, that MockStore does implement Store.
+// Ensure, that MockEventStore does implement EventStore.
 // If this is not the case, regenerate this file with moq.
-var _ Store = &MockStore{}
+var _ EventStore = &MockEventStore{}
 
-// MockStore is a mock implementation of Store.
+// MockEventStore is a mock implementation of EventStore.
 //
-//	func TestSomethingThatUsesStore(t *testing.T) {
+//	func TestSomethingThatUsesEventStore(t *testing.T) {
 //
-//		// make and configure a mocked Store
-//		mockedStore := &MockStore{
-//			ActiveFunc: func(ctx context.Context) ([]Run, error) {
-//				panic("mock out the Active method")
-//			},
+//		// make and configure a mocked EventStore
+//		mockedEventStore := &MockEventStore{
 //			AppendFunc: func(ctx context.Context, runID string, evt events.Event) (events.Event, error) {
 //				panic("mock out the Append method")
 //			},
@@ -32,40 +29,19 @@ var _ Store = &MockStore{}
 //			CloseFunc: func() error {
 //				panic("mock out the Close method")
 //			},
-//			CreateFunc: func(ctx context.Context, run Run) error {
-//				panic("mock out the Create method")
-//			},
-//			DailyTokensFunc: func(ctx context.Context, from time.Time, to time.Time) (map[string]events.TokenUsage, error) {
-//				panic("mock out the DailyTokens method")
-//			},
 //			EventsRangeFunc: func(ctx context.Context, runID string, sinceSeq int64, limit int) ([]events.Event, error) {
 //				panic("mock out the EventsRange method")
 //			},
 //			EventsTailFunc: func(ctx context.Context, runID string, lastStreamID string, block time.Duration) (EventTail, error) {
 //				panic("mock out the EventsTail method")
 //			},
-//			FinalizeFunc: func(ctx context.Context, id string, phase Phase, errStr string) error {
-//				panic("mock out the Finalize method")
-//			},
-//			GetFunc: func(ctx context.Context, id string) (Run, error) {
-//				panic("mock out the Get method")
-//			},
-//			ListFunc: func(ctx context.Context, filter ListFilter) ([]Run, error) {
-//				panic("mock out the List method")
-//			},
-//			UpdateFunc: func(ctx context.Context, id string, mutate func(*Run)) error {
-//				panic("mock out the Update method")
-//			},
 //		}
 //
-//		// use mockedStore in code that requires Store
+//		// use mockedEventStore in code that requires EventStore
 //		// and then make assertions.
 //
 //	}
-type MockStore struct {
-	// ActiveFunc mocks the Active method.
-	ActiveFunc func(ctx context.Context) ([]Run, error)
-
+type MockEventStore struct {
 	// AppendFunc mocks the Append method.
 	AppendFunc func(ctx context.Context, runID string, evt events.Event) (events.Event, error)
 
@@ -75,37 +51,14 @@ type MockStore struct {
 	// CloseFunc mocks the Close method.
 	CloseFunc func() error
 
-	// CreateFunc mocks the Create method.
-	CreateFunc func(ctx context.Context, run Run) error
-
-	// DailyTokensFunc mocks the DailyTokens method.
-	DailyTokensFunc func(ctx context.Context, from time.Time, to time.Time) (map[string]events.TokenUsage, error)
-
 	// EventsRangeFunc mocks the EventsRange method.
 	EventsRangeFunc func(ctx context.Context, runID string, sinceSeq int64, limit int) ([]events.Event, error)
 
 	// EventsTailFunc mocks the EventsTail method.
 	EventsTailFunc func(ctx context.Context, runID string, lastStreamID string, block time.Duration) (EventTail, error)
 
-	// FinalizeFunc mocks the Finalize method.
-	FinalizeFunc func(ctx context.Context, id string, phase Phase, errStr string) error
-
-	// GetFunc mocks the Get method.
-	GetFunc func(ctx context.Context, id string) (Run, error)
-
-	// ListFunc mocks the List method.
-	ListFunc func(ctx context.Context, filter ListFilter) ([]Run, error)
-
-	// UpdateFunc mocks the Update method.
-	UpdateFunc func(ctx context.Context, id string, mutate func(*Run)) error
-
 	// calls tracks calls to the methods.
 	calls struct {
-		// Active holds details about calls to the Active method.
-		Active []struct {
-			// Ctx is the ctx argument value.
-			Ctx context.Context
-		}
 		// Append holds details about calls to the Append method.
 		Append []struct {
 			// Ctx is the ctx argument value.
@@ -122,22 +75,6 @@ type MockStore struct {
 		}
 		// Close holds details about calls to the Close method.
 		Close []struct {
-		}
-		// Create holds details about calls to the Create method.
-		Create []struct {
-			// Ctx is the ctx argument value.
-			Ctx context.Context
-			// Run is the run argument value.
-			Run Run
-		}
-		// DailyTokens holds details about calls to the DailyTokens method.
-		DailyTokens []struct {
-			// Ctx is the ctx argument value.
-			Ctx context.Context
-			// From is the from argument value.
-			From time.Time
-			// To is the to argument value.
-			To time.Time
 		}
 		// EventsRange holds details about calls to the EventsRange method.
 		EventsRange []struct {
@@ -161,91 +98,18 @@ type MockStore struct {
 			// Block is the block argument value.
 			Block time.Duration
 		}
-		// Finalize holds details about calls to the Finalize method.
-		Finalize []struct {
-			// Ctx is the ctx argument value.
-			Ctx context.Context
-			// ID is the id argument value.
-			ID string
-			// Phase is the phase argument value.
-			Phase Phase
-			// ErrStr is the errStr argument value.
-			ErrStr string
-		}
-		// Get holds details about calls to the Get method.
-		Get []struct {
-			// Ctx is the ctx argument value.
-			Ctx context.Context
-			// ID is the id argument value.
-			ID string
-		}
-		// List holds details about calls to the List method.
-		List []struct {
-			// Ctx is the ctx argument value.
-			Ctx context.Context
-			// Filter is the filter argument value.
-			Filter ListFilter
-		}
-		// Update holds details about calls to the Update method.
-		Update []struct {
-			// Ctx is the ctx argument value.
-			Ctx context.Context
-			// ID is the id argument value.
-			ID string
-			// Mutate is the mutate argument value.
-			Mutate func(*Run)
-		}
 	}
-	lockActive      sync.RWMutex
 	lockAppend      sync.RWMutex
 	lockAppendSink  sync.RWMutex
 	lockClose       sync.RWMutex
-	lockCreate      sync.RWMutex
-	lockDailyTokens sync.RWMutex
 	lockEventsRange sync.RWMutex
 	lockEventsTail  sync.RWMutex
-	lockFinalize    sync.RWMutex
-	lockGet         sync.RWMutex
-	lockList        sync.RWMutex
-	lockUpdate      sync.RWMutex
-}
-
-// Active calls ActiveFunc.
-func (mock *MockStore) Active(ctx context.Context) ([]Run, error) {
-	if mock.ActiveFunc == nil {
-		panic("MockStore.ActiveFunc: method is nil but Store.Active was just called")
-	}
-	callInfo := struct {
-		Ctx context.Context
-	}{
-		Ctx: ctx,
-	}
-	mock.lockActive.Lock()
-	mock.calls.Active = append(mock.calls.Active, callInfo)
-	mock.lockActive.Unlock()
-	return mock.ActiveFunc(ctx)
-}
-
-// ActiveCalls gets all the calls that were made to Active.
-// Check the length with:
-//
-//	len(mockedStore.ActiveCalls())
-func (mock *MockStore) ActiveCalls() []struct {
-	Ctx context.Context
-} {
-	var calls []struct {
-		Ctx context.Context
-	}
-	mock.lockActive.RLock()
-	calls = mock.calls.Active
-	mock.lockActive.RUnlock()
-	return calls
 }
 
 // Append calls AppendFunc.
-func (mock *MockStore) Append(ctx context.Context, runID string, evt events.Event) (events.Event, error) {
+func (mock *MockEventStore) Append(ctx context.Context, runID string, evt events.Event) (events.Event, error) {
 	if mock.AppendFunc == nil {
-		panic("MockStore.AppendFunc: method is nil but Store.Append was just called")
+		panic("MockEventStore.AppendFunc: method is nil but EventStore.Append was just called")
 	}
 	callInfo := struct {
 		Ctx   context.Context
@@ -265,8 +129,8 @@ func (mock *MockStore) Append(ctx context.Context, runID string, evt events.Even
 // AppendCalls gets all the calls that were made to Append.
 // Check the length with:
 //
-//	len(mockedStore.AppendCalls())
-func (mock *MockStore) AppendCalls() []struct {
+//	len(mockedEventStore.AppendCalls())
+func (mock *MockEventStore) AppendCalls() []struct {
 	Ctx   context.Context
 	RunID string
 	Evt   events.Event
@@ -283,9 +147,9 @@ func (mock *MockStore) AppendCalls() []struct {
 }
 
 // AppendSink calls AppendSinkFunc.
-func (mock *MockStore) AppendSink(runID string) events.Sink {
+func (mock *MockEventStore) AppendSink(runID string) events.Sink {
 	if mock.AppendSinkFunc == nil {
-		panic("MockStore.AppendSinkFunc: method is nil but Store.AppendSink was just called")
+		panic("MockEventStore.AppendSinkFunc: method is nil but EventStore.AppendSink was just called")
 	}
 	callInfo := struct {
 		RunID string
@@ -301,8 +165,8 @@ func (mock *MockStore) AppendSink(runID string) events.Sink {
 // AppendSinkCalls gets all the calls that were made to AppendSink.
 // Check the length with:
 //
-//	len(mockedStore.AppendSinkCalls())
-func (mock *MockStore) AppendSinkCalls() []struct {
+//	len(mockedEventStore.AppendSinkCalls())
+func (mock *MockEventStore) AppendSinkCalls() []struct {
 	RunID string
 } {
 	var calls []struct {
@@ -315,9 +179,9 @@ func (mock *MockStore) AppendSinkCalls() []struct {
 }
 
 // Close calls CloseFunc.
-func (mock *MockStore) Close() error {
+func (mock *MockEventStore) Close() error {
 	if mock.CloseFunc == nil {
-		panic("MockStore.CloseFunc: method is nil but Store.Close was just called")
+		panic("MockEventStore.CloseFunc: method is nil but EventStore.Close was just called")
 	}
 	callInfo := struct {
 	}{}
@@ -330,8 +194,8 @@ func (mock *MockStore) Close() error {
 // CloseCalls gets all the calls that were made to Close.
 // Check the length with:
 //
-//	len(mockedStore.CloseCalls())
-func (mock *MockStore) CloseCalls() []struct {
+//	len(mockedEventStore.CloseCalls())
+func (mock *MockEventStore) CloseCalls() []struct {
 } {
 	var calls []struct {
 	}
@@ -341,86 +205,10 @@ func (mock *MockStore) CloseCalls() []struct {
 	return calls
 }
 
-// Create calls CreateFunc.
-func (mock *MockStore) Create(ctx context.Context, run Run) error {
-	if mock.CreateFunc == nil {
-		panic("MockStore.CreateFunc: method is nil but Store.Create was just called")
-	}
-	callInfo := struct {
-		Ctx context.Context
-		Run Run
-	}{
-		Ctx: ctx,
-		Run: run,
-	}
-	mock.lockCreate.Lock()
-	mock.calls.Create = append(mock.calls.Create, callInfo)
-	mock.lockCreate.Unlock()
-	return mock.CreateFunc(ctx, run)
-}
-
-// CreateCalls gets all the calls that were made to Create.
-// Check the length with:
-//
-//	len(mockedStore.CreateCalls())
-func (mock *MockStore) CreateCalls() []struct {
-	Ctx context.Context
-	Run Run
-} {
-	var calls []struct {
-		Ctx context.Context
-		Run Run
-	}
-	mock.lockCreate.RLock()
-	calls = mock.calls.Create
-	mock.lockCreate.RUnlock()
-	return calls
-}
-
-// DailyTokens calls DailyTokensFunc.
-func (mock *MockStore) DailyTokens(ctx context.Context, from time.Time, to time.Time) (map[string]events.TokenUsage, error) {
-	if mock.DailyTokensFunc == nil {
-		panic("MockStore.DailyTokensFunc: method is nil but Store.DailyTokens was just called")
-	}
-	callInfo := struct {
-		Ctx  context.Context
-		From time.Time
-		To   time.Time
-	}{
-		Ctx:  ctx,
-		From: from,
-		To:   to,
-	}
-	mock.lockDailyTokens.Lock()
-	mock.calls.DailyTokens = append(mock.calls.DailyTokens, callInfo)
-	mock.lockDailyTokens.Unlock()
-	return mock.DailyTokensFunc(ctx, from, to)
-}
-
-// DailyTokensCalls gets all the calls that were made to DailyTokens.
-// Check the length with:
-//
-//	len(mockedStore.DailyTokensCalls())
-func (mock *MockStore) DailyTokensCalls() []struct {
-	Ctx  context.Context
-	From time.Time
-	To   time.Time
-} {
-	var calls []struct {
-		Ctx  context.Context
-		From time.Time
-		To   time.Time
-	}
-	mock.lockDailyTokens.RLock()
-	calls = mock.calls.DailyTokens
-	mock.lockDailyTokens.RUnlock()
-	return calls
-}
-
 // EventsRange calls EventsRangeFunc.
-func (mock *MockStore) EventsRange(ctx context.Context, runID string, sinceSeq int64, limit int) ([]events.Event, error) {
+func (mock *MockEventStore) EventsRange(ctx context.Context, runID string, sinceSeq int64, limit int) ([]events.Event, error) {
 	if mock.EventsRangeFunc == nil {
-		panic("MockStore.EventsRangeFunc: method is nil but Store.EventsRange was just called")
+		panic("MockEventStore.EventsRangeFunc: method is nil but EventStore.EventsRange was just called")
 	}
 	callInfo := struct {
 		Ctx      context.Context
@@ -442,8 +230,8 @@ func (mock *MockStore) EventsRange(ctx context.Context, runID string, sinceSeq i
 // EventsRangeCalls gets all the calls that were made to EventsRange.
 // Check the length with:
 //
-//	len(mockedStore.EventsRangeCalls())
-func (mock *MockStore) EventsRangeCalls() []struct {
+//	len(mockedEventStore.EventsRangeCalls())
+func (mock *MockEventStore) EventsRangeCalls() []struct {
 	Ctx      context.Context
 	RunID    string
 	SinceSeq int64
@@ -462,9 +250,9 @@ func (mock *MockStore) EventsRangeCalls() []struct {
 }
 
 // EventsTail calls EventsTailFunc.
-func (mock *MockStore) EventsTail(ctx context.Context, runID string, lastStreamID string, block time.Duration) (EventTail, error) {
+func (mock *MockEventStore) EventsTail(ctx context.Context, runID string, lastStreamID string, block time.Duration) (EventTail, error) {
 	if mock.EventsTailFunc == nil {
-		panic("MockStore.EventsTailFunc: method is nil but Store.EventsTail was just called")
+		panic("MockEventStore.EventsTailFunc: method is nil but EventStore.EventsTail was just called")
 	}
 	callInfo := struct {
 		Ctx          context.Context
@@ -486,8 +274,8 @@ func (mock *MockStore) EventsTail(ctx context.Context, runID string, lastStreamI
 // EventsTailCalls gets all the calls that were made to EventsTail.
 // Check the length with:
 //
-//	len(mockedStore.EventsTailCalls())
-func (mock *MockStore) EventsTailCalls() []struct {
+//	len(mockedEventStore.EventsTailCalls())
+func (mock *MockEventStore) EventsTailCalls() []struct {
 	Ctx          context.Context
 	RunID        string
 	LastStreamID string
@@ -505,158 +293,248 @@ func (mock *MockStore) EventsTailCalls() []struct {
 	return calls
 }
 
-// Finalize calls FinalizeFunc.
-func (mock *MockStore) Finalize(ctx context.Context, id string, phase Phase, errStr string) error {
-	if mock.FinalizeFunc == nil {
-		panic("MockStore.FinalizeFunc: method is nil but Store.Finalize was just called")
+// Ensure, that MockStepRunWriter does implement StepRunWriter.
+// If this is not the case, regenerate this file with moq.
+var _ StepRunWriter = &MockStepRunWriter{}
+
+// MockStepRunWriter is a mock implementation of StepRunWriter.
+//
+//	func TestSomethingThatUsesStepRunWriter(t *testing.T) {
+//
+//		// make and configure a mocked StepRunWriter
+//		mockedStepRunWriter := &MockStepRunWriter{
+//			AddStepUsageFunc: func(ctx context.Context, stepRunID string, usage events.TokenUsage) error {
+//				panic("mock out the AddStepUsage method")
+//			},
+//			SetStepIterationFunc: func(ctx context.Context, stepRunID string, iteration int) error {
+//				panic("mock out the SetStepIteration method")
+//			},
+//			SetStepPhaseFunc: func(ctx context.Context, stepRunID string, phase string) error {
+//				panic("mock out the SetStepPhase method")
+//			},
+//			SetStepSessionFunc: func(ctx context.Context, stepRunID string, session string) error {
+//				panic("mock out the SetStepSession method")
+//			},
+//		}
+//
+//		// use mockedStepRunWriter in code that requires StepRunWriter
+//		// and then make assertions.
+//
+//	}
+type MockStepRunWriter struct {
+	// AddStepUsageFunc mocks the AddStepUsage method.
+	AddStepUsageFunc func(ctx context.Context, stepRunID string, usage events.TokenUsage) error
+
+	// SetStepIterationFunc mocks the SetStepIteration method.
+	SetStepIterationFunc func(ctx context.Context, stepRunID string, iteration int) error
+
+	// SetStepPhaseFunc mocks the SetStepPhase method.
+	SetStepPhaseFunc func(ctx context.Context, stepRunID string, phase string) error
+
+	// SetStepSessionFunc mocks the SetStepSession method.
+	SetStepSessionFunc func(ctx context.Context, stepRunID string, session string) error
+
+	// calls tracks calls to the methods.
+	calls struct {
+		// AddStepUsage holds details about calls to the AddStepUsage method.
+		AddStepUsage []struct {
+			// Ctx is the ctx argument value.
+			Ctx context.Context
+			// StepRunID is the stepRunID argument value.
+			StepRunID string
+			// Usage is the usage argument value.
+			Usage events.TokenUsage
+		}
+		// SetStepIteration holds details about calls to the SetStepIteration method.
+		SetStepIteration []struct {
+			// Ctx is the ctx argument value.
+			Ctx context.Context
+			// StepRunID is the stepRunID argument value.
+			StepRunID string
+			// Iteration is the iteration argument value.
+			Iteration int
+		}
+		// SetStepPhase holds details about calls to the SetStepPhase method.
+		SetStepPhase []struct {
+			// Ctx is the ctx argument value.
+			Ctx context.Context
+			// StepRunID is the stepRunID argument value.
+			StepRunID string
+			// Phase is the phase argument value.
+			Phase string
+		}
+		// SetStepSession holds details about calls to the SetStepSession method.
+		SetStepSession []struct {
+			// Ctx is the ctx argument value.
+			Ctx context.Context
+			// StepRunID is the stepRunID argument value.
+			StepRunID string
+			// Session is the session argument value.
+			Session string
+		}
 	}
-	callInfo := struct {
-		Ctx    context.Context
-		ID     string
-		Phase  Phase
-		ErrStr string
-	}{
-		Ctx:    ctx,
-		ID:     id,
-		Phase:  phase,
-		ErrStr: errStr,
-	}
-	mock.lockFinalize.Lock()
-	mock.calls.Finalize = append(mock.calls.Finalize, callInfo)
-	mock.lockFinalize.Unlock()
-	return mock.FinalizeFunc(ctx, id, phase, errStr)
+	lockAddStepUsage     sync.RWMutex
+	lockSetStepIteration sync.RWMutex
+	lockSetStepPhase     sync.RWMutex
+	lockSetStepSession   sync.RWMutex
 }
 
-// FinalizeCalls gets all the calls that were made to Finalize.
+// AddStepUsage calls AddStepUsageFunc.
+func (mock *MockStepRunWriter) AddStepUsage(ctx context.Context, stepRunID string, usage events.TokenUsage) error {
+	if mock.AddStepUsageFunc == nil {
+		panic("MockStepRunWriter.AddStepUsageFunc: method is nil but StepRunWriter.AddStepUsage was just called")
+	}
+	callInfo := struct {
+		Ctx       context.Context
+		StepRunID string
+		Usage     events.TokenUsage
+	}{
+		Ctx:       ctx,
+		StepRunID: stepRunID,
+		Usage:     usage,
+	}
+	mock.lockAddStepUsage.Lock()
+	mock.calls.AddStepUsage = append(mock.calls.AddStepUsage, callInfo)
+	mock.lockAddStepUsage.Unlock()
+	return mock.AddStepUsageFunc(ctx, stepRunID, usage)
+}
+
+// AddStepUsageCalls gets all the calls that were made to AddStepUsage.
 // Check the length with:
 //
-//	len(mockedStore.FinalizeCalls())
-func (mock *MockStore) FinalizeCalls() []struct {
-	Ctx    context.Context
-	ID     string
-	Phase  Phase
-	ErrStr string
+//	len(mockedStepRunWriter.AddStepUsageCalls())
+func (mock *MockStepRunWriter) AddStepUsageCalls() []struct {
+	Ctx       context.Context
+	StepRunID string
+	Usage     events.TokenUsage
 } {
 	var calls []struct {
-		Ctx    context.Context
-		ID     string
-		Phase  Phase
-		ErrStr string
+		Ctx       context.Context
+		StepRunID string
+		Usage     events.TokenUsage
 	}
-	mock.lockFinalize.RLock()
-	calls = mock.calls.Finalize
-	mock.lockFinalize.RUnlock()
+	mock.lockAddStepUsage.RLock()
+	calls = mock.calls.AddStepUsage
+	mock.lockAddStepUsage.RUnlock()
 	return calls
 }
 
-// Get calls GetFunc.
-func (mock *MockStore) Get(ctx context.Context, id string) (Run, error) {
-	if mock.GetFunc == nil {
-		panic("MockStore.GetFunc: method is nil but Store.Get was just called")
+// SetStepIteration calls SetStepIterationFunc.
+func (mock *MockStepRunWriter) SetStepIteration(ctx context.Context, stepRunID string, iteration int) error {
+	if mock.SetStepIterationFunc == nil {
+		panic("MockStepRunWriter.SetStepIterationFunc: method is nil but StepRunWriter.SetStepIteration was just called")
 	}
 	callInfo := struct {
-		Ctx context.Context
-		ID  string
+		Ctx       context.Context
+		StepRunID string
+		Iteration int
 	}{
-		Ctx: ctx,
-		ID:  id,
+		Ctx:       ctx,
+		StepRunID: stepRunID,
+		Iteration: iteration,
 	}
-	mock.lockGet.Lock()
-	mock.calls.Get = append(mock.calls.Get, callInfo)
-	mock.lockGet.Unlock()
-	return mock.GetFunc(ctx, id)
+	mock.lockSetStepIteration.Lock()
+	mock.calls.SetStepIteration = append(mock.calls.SetStepIteration, callInfo)
+	mock.lockSetStepIteration.Unlock()
+	return mock.SetStepIterationFunc(ctx, stepRunID, iteration)
 }
 
-// GetCalls gets all the calls that were made to Get.
+// SetStepIterationCalls gets all the calls that were made to SetStepIteration.
 // Check the length with:
 //
-//	len(mockedStore.GetCalls())
-func (mock *MockStore) GetCalls() []struct {
-	Ctx context.Context
-	ID  string
+//	len(mockedStepRunWriter.SetStepIterationCalls())
+func (mock *MockStepRunWriter) SetStepIterationCalls() []struct {
+	Ctx       context.Context
+	StepRunID string
+	Iteration int
 } {
 	var calls []struct {
-		Ctx context.Context
-		ID  string
+		Ctx       context.Context
+		StepRunID string
+		Iteration int
 	}
-	mock.lockGet.RLock()
-	calls = mock.calls.Get
-	mock.lockGet.RUnlock()
+	mock.lockSetStepIteration.RLock()
+	calls = mock.calls.SetStepIteration
+	mock.lockSetStepIteration.RUnlock()
 	return calls
 }
 
-// List calls ListFunc.
-func (mock *MockStore) List(ctx context.Context, filter ListFilter) ([]Run, error) {
-	if mock.ListFunc == nil {
-		panic("MockStore.ListFunc: method is nil but Store.List was just called")
+// SetStepPhase calls SetStepPhaseFunc.
+func (mock *MockStepRunWriter) SetStepPhase(ctx context.Context, stepRunID string, phase string) error {
+	if mock.SetStepPhaseFunc == nil {
+		panic("MockStepRunWriter.SetStepPhaseFunc: method is nil but StepRunWriter.SetStepPhase was just called")
 	}
 	callInfo := struct {
-		Ctx    context.Context
-		Filter ListFilter
+		Ctx       context.Context
+		StepRunID string
+		Phase     string
 	}{
-		Ctx:    ctx,
-		Filter: filter,
+		Ctx:       ctx,
+		StepRunID: stepRunID,
+		Phase:     phase,
 	}
-	mock.lockList.Lock()
-	mock.calls.List = append(mock.calls.List, callInfo)
-	mock.lockList.Unlock()
-	return mock.ListFunc(ctx, filter)
+	mock.lockSetStepPhase.Lock()
+	mock.calls.SetStepPhase = append(mock.calls.SetStepPhase, callInfo)
+	mock.lockSetStepPhase.Unlock()
+	return mock.SetStepPhaseFunc(ctx, stepRunID, phase)
 }
 
-// ListCalls gets all the calls that were made to List.
+// SetStepPhaseCalls gets all the calls that were made to SetStepPhase.
 // Check the length with:
 //
-//	len(mockedStore.ListCalls())
-func (mock *MockStore) ListCalls() []struct {
-	Ctx    context.Context
-	Filter ListFilter
+//	len(mockedStepRunWriter.SetStepPhaseCalls())
+func (mock *MockStepRunWriter) SetStepPhaseCalls() []struct {
+	Ctx       context.Context
+	StepRunID string
+	Phase     string
 } {
 	var calls []struct {
-		Ctx    context.Context
-		Filter ListFilter
+		Ctx       context.Context
+		StepRunID string
+		Phase     string
 	}
-	mock.lockList.RLock()
-	calls = mock.calls.List
-	mock.lockList.RUnlock()
+	mock.lockSetStepPhase.RLock()
+	calls = mock.calls.SetStepPhase
+	mock.lockSetStepPhase.RUnlock()
 	return calls
 }
 
-// Update calls UpdateFunc.
-func (mock *MockStore) Update(ctx context.Context, id string, mutate func(*Run)) error {
-	if mock.UpdateFunc == nil {
-		panic("MockStore.UpdateFunc: method is nil but Store.Update was just called")
+// SetStepSession calls SetStepSessionFunc.
+func (mock *MockStepRunWriter) SetStepSession(ctx context.Context, stepRunID string, session string) error {
+	if mock.SetStepSessionFunc == nil {
+		panic("MockStepRunWriter.SetStepSessionFunc: method is nil but StepRunWriter.SetStepSession was just called")
 	}
 	callInfo := struct {
-		Ctx    context.Context
-		ID     string
-		Mutate func(*Run)
+		Ctx       context.Context
+		StepRunID string
+		Session   string
 	}{
-		Ctx:    ctx,
-		ID:     id,
-		Mutate: mutate,
+		Ctx:       ctx,
+		StepRunID: stepRunID,
+		Session:   session,
 	}
-	mock.lockUpdate.Lock()
-	mock.calls.Update = append(mock.calls.Update, callInfo)
-	mock.lockUpdate.Unlock()
-	return mock.UpdateFunc(ctx, id, mutate)
+	mock.lockSetStepSession.Lock()
+	mock.calls.SetStepSession = append(mock.calls.SetStepSession, callInfo)
+	mock.lockSetStepSession.Unlock()
+	return mock.SetStepSessionFunc(ctx, stepRunID, session)
 }
 
-// UpdateCalls gets all the calls that were made to Update.
+// SetStepSessionCalls gets all the calls that were made to SetStepSession.
 // Check the length with:
 //
-//	len(mockedStore.UpdateCalls())
-func (mock *MockStore) UpdateCalls() []struct {
-	Ctx    context.Context
-	ID     string
-	Mutate func(*Run)
+//	len(mockedStepRunWriter.SetStepSessionCalls())
+func (mock *MockStepRunWriter) SetStepSessionCalls() []struct {
+	Ctx       context.Context
+	StepRunID string
+	Session   string
 } {
 	var calls []struct {
-		Ctx    context.Context
-		ID     string
-		Mutate func(*Run)
+		Ctx       context.Context
+		StepRunID string
+		Session   string
 	}
-	mock.lockUpdate.RLock()
-	calls = mock.calls.Update
-	mock.lockUpdate.RUnlock()
+	mock.lockSetStepSession.RLock()
+	calls = mock.calls.SetStepSession
+	mock.lockSetStepSession.RUnlock()
 	return calls
 }

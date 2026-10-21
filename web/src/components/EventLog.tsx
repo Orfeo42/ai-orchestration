@@ -1,11 +1,11 @@
 import type { RunEvent } from "@/types";
 import { Badge } from "@/components/ui/badge";
-import Markdown from "@/components/Markdown";
+import { Markdown } from "@/components/Markdown";
 import { cn } from "@/lib/utils";
 
-interface Props {
+type Props = {
   events: RunEvent[];
-}
+};
 
 function formatInput(input?: string): string {
   if (!input) return "";
@@ -31,7 +31,7 @@ const kindColor: Record<string, string> = {
   run_end: "text-muted-foreground",
 };
 
-export default function EventLog({ events }: Props) {
+export function EventLog({ events }: Props) {
   if (events.length === 0) {
     return (
       <div className="rounded-md border border-dashed py-10 text-center text-sm text-muted-foreground">
@@ -41,9 +41,9 @@ export default function EventLog({ events }: Props) {
   }
   return (
     <ol className="flex flex-col divide-y rounded-md border">
-      {events.map((evt, i) => (
+      {events.map((evt) => (
         <li
-          key={`${evt.id ?? i}-${evt.seq ?? i}`}
+          key={`${evt.id ?? ""}-${String(evt.seq ?? "")}-${evt.at}-${evt.kind}`}
           className="flex items-start gap-3 px-4 py-2.5 text-sm"
         >
           <span className="w-20 shrink-0 font-mono text-xs text-muted-foreground">
@@ -94,9 +94,9 @@ function renderBody(evt: RunEvent) {
       if (evt.usage) {
         return (
           <span className="font-mono text-xs text-muted-foreground">
-            in {evt.usage.input} · out {evt.usage.output}
+            in {String(evt.usage.input)} · out {String(evt.usage.output)}
             {evt.usage.cache_read_input
-              ? ` · cache ${evt.usage.cache_read_input}`
+              ? ` · cache ${String(evt.usage.cache_read_input)}`
               : ""}
           </span>
         );

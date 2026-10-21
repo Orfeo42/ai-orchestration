@@ -30,6 +30,9 @@ var _ Forgejo = &MockForgejo{}
 //			CreatePRReviewFunc: func(owner string, repo string, prNumber int, body string, approved bool) error {
 //				panic("mock out the CreatePRReview method")
 //			},
+//			CurrentUserFunc: func() (string, error) {
+//				panic("mock out the CurrentUser method")
+//			},
 //			GetCommentsFunc: func(owner string, repo string, issueNumber int) ([]models.IssueComment, error) {
 //				panic("mock out the GetComments method")
 //			},
@@ -72,6 +75,9 @@ type MockForgejo struct {
 
 	// CreatePRReviewFunc mocks the CreatePRReview method.
 	CreatePRReviewFunc func(owner string, repo string, prNumber int, body string, approved bool) error
+
+	// CurrentUserFunc mocks the CurrentUser method.
+	CurrentUserFunc func() (string, error)
 
 	// GetCommentsFunc mocks the GetComments method.
 	GetCommentsFunc func(owner string, repo string, issueNumber int) ([]models.IssueComment, error)
@@ -148,6 +154,9 @@ type MockForgejo struct {
 			Body string
 			// Approved is the approved argument value.
 			Approved bool
+		}
+		// CurrentUser holds details about calls to the CurrentUser method.
+		CurrentUser []struct {
 		}
 		// GetComments holds details about calls to the GetComments method.
 		GetComments []struct {
@@ -232,6 +241,7 @@ type MockForgejo struct {
 	lockCreateComment  sync.RWMutex
 	lockCreatePR       sync.RWMutex
 	lockCreatePRReview sync.RWMutex
+	lockCurrentUser    sync.RWMutex
 	lockGetComments    sync.RWMutex
 	lockGetIssue       sync.RWMutex
 	lockGetIssues      sync.RWMutex
@@ -427,6 +437,33 @@ func (mock *MockForgejo) CreatePRReviewCalls() []struct {
 	mock.lockCreatePRReview.RLock()
 	calls = mock.calls.CreatePRReview
 	mock.lockCreatePRReview.RUnlock()
+	return calls
+}
+
+// CurrentUser calls CurrentUserFunc.
+func (mock *MockForgejo) CurrentUser() (string, error) {
+	if mock.CurrentUserFunc == nil {
+		panic("MockForgejo.CurrentUserFunc: method is nil but Forgejo.CurrentUser was just called")
+	}
+	callInfo := struct {
+	}{}
+	mock.lockCurrentUser.Lock()
+	mock.calls.CurrentUser = append(mock.calls.CurrentUser, callInfo)
+	mock.lockCurrentUser.Unlock()
+	return mock.CurrentUserFunc()
+}
+
+// CurrentUserCalls gets all the calls that were made to CurrentUser.
+// Check the length with:
+//
+//	len(mockedForgejo.CurrentUserCalls())
+func (mock *MockForgejo) CurrentUserCalls() []struct {
+} {
+	var calls []struct {
+	}
+	mock.lockCurrentUser.RLock()
+	calls = mock.calls.CurrentUser
+	mock.lockCurrentUser.RUnlock()
 	return calls
 }
 

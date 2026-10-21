@@ -1,16 +1,17 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
-import { resolve } from "path";
+import tailwindcss from "@tailwindcss/vite";
+import { resolve } from "node:path";
 
 export default defineConfig({
-  plugins: [react()],
+  plugins: [react(), tailwindcss()],
   resolve: {
     alias: {
-      "@": resolve(__dirname, "src"),
+      "@": resolve(import.meta.dirname, "src"),
     },
   },
   build: {
-    outDir: resolve(__dirname, "../cmd/webui/dist"),
+    outDir: resolve(import.meta.dirname, "../cmd/webui/dist"),
     emptyOutDir: true,
   },
   server: {

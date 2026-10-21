@@ -9,37 +9,17 @@ import (
 	"net"
 	"net/http"
 	"time"
-
-	"ai-orchestration/internal/control"
-	"ai-orchestration/internal/forgejo"
-	"ai-orchestration/internal/queue"
-	"ai-orchestration/internal/runstore"
 )
 
 type server struct {
-	addr  string
-	store runstore.Store
-	ctrl  control.Channel
-	rq    queue.Queue
-	fj    forgejo.Forgejo
-	srv   *http.Server
+	addr string
+	srv  *http.Server
 }
 
-func newServer(addr string, store runstore.Store, ctrl control.Channel, rq queue.Queue, fj forgejo.Forgejo) (*server, error) {
+func newServer(addr string, proc *processHandler) (*server, error) {
 	mux := http.NewServeMux()
-	api := &apiHandler{store: store, ctrl: ctrl, rq: rq, fj: fj}
-
-	mux.HandleFunc("GET /api/runs", api.listRuns)
-	mux.HandleFunc("GET /api/runs/active", api.listActive)
-	mux.HandleFunc("GET /api/runs/{id}", api.getRun)
-	mux.HandleFunc("GET /api/runs/{id}/events", api.getRunEvents)
-	mux.HandleFunc("POST /api/runs/{id}/cancel", api.cancelRun)
-	mux.HandleFunc("POST /api/runs/{id}/inject", api.injectRun)
-	mux.HandleFunc("POST /api/runs/{id}/retry", api.retryRun)
-	mux.HandleFunc("GET /api/runs/{id}/diff", api.getRunDiff)
-	mux.HandleFunc("GET /api/stats/tokens", api.getDailyTokens)
-	mux.HandleFunc("GET /healthz", api.healthz)
-	mux.HandleFunc("GET /ws/runs/{id}", api.streamRun)
+	mux.HandleFunc("GET /healthz", healthz)
+	registerProcessRoutes(mux, proc)
 
 	static, err := staticHandler()
 	if err != nil {
@@ -52,7 +32,7 @@ func newServer(addr string, store runstore.Store, ctrl control.Channel, rq queue
 		Handler:           logRequest(mux),
 		ReadHeaderTimeout: 10 * time.Second,
 	}
-	return &server{addr: addr, store: store, ctrl: ctrl, rq: rq, fj: fj, srv: srv}, nil
+	return &server{addr: addr, srv: srv}, nil
 }
 
 func (s *server) run(ctx context.Context) error {
@@ -117,4 +97,25 @@ func (s *statusRecorder) Flush() {
 	if f, ok := s.ResponseWriter.(http.Flusher); ok {
 		f.Flush()
 	}
+}
+
+func registerProcessRoutes(mux *http.ServeMux, h *processHandler) {
+	mux.HandleFunc("GET /api/processes", h.listProcesses)
+	mux.HandleFunc("GET /api/processes/{id}", h.getProcess)
+	mux.HandleFunc("POST /api/processes", h.startProcess)
+	mux.HandleFunc("POST /api/processes/{id}/cancel", h.cancelProcess)
+	mux.HandleFunc("POST /api/processes/{id}/retry", h.retryProcess)
+	mux.HandleFunc("POST /api/processes/{id}/signal", h.signalProcess)
+	mux.HandleFunc("GET /api/step-runs/{id}", h.getStepRun)
+	mux.HandleFunc("GET /api/step-runs/{id}/events", h.getStepRunEvents)
+	mux.HandleFunc("POST /api/step-runs/{id}/cancel", h.cancelStepRun)
+	mux.HandleFunc("POST /api/step-runs/{id}/inject", h.injectStepRun)
+	mux.HandleFunc("GET /api/step-runs/{id}/diff", h.getStepRunDiff)
+	mux.HandleFunc("GET /ws/step-runs/{id}", h.streamStepRun)
+	mux.HandleFunc("GET /api/workflows", h.listWorkflows)
+	mux.HandleFunc("GET /api/workflows/{name}", h.getWorkflow)
+	mux.HandleFunc("GET /api/analytics/workflows", h.analyticsWorkflows)
+	mux.HandleFunc("GET /api/analytics/steps", h.analyticsSteps)
+	mux.HandleFunc("GET /api/analytics/tokens", h.analyticsTokens)
+	mux.HandleFunc("GET /api/analytics/failures", h.analyticsFailures)
 }

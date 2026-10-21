@@ -6,13 +6,21 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { useTheme, type Theme } from "@/lib/theme";
+import { isTheme, useTheme } from "@/lib/theme";
 
-export function ThemeToggle({ className }: { className?: string }) {
+type Props = {
+  className?: string;
+};
+
+export function ThemeToggle({ className }: Props) {
   const { theme, setTheme } = useTheme();
 
+  function handleChange(value: string) {
+    if (isTheme(value)) setTheme(value);
+  }
+
   return (
-    <Select value={theme} onValueChange={(v) => setTheme(v as Theme)}>
+    <Select value={theme} onValueChange={handleChange}>
       <SelectTrigger className={className} aria-label="Theme">
         <SelectValue />
       </SelectTrigger>

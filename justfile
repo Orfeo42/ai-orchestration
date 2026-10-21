@@ -8,7 +8,7 @@ default:
 
 # install + build react SPA -> cmd/webui/dist
 web:
-    cd {{ web_dir }} && npm install --no-audit --no-fund
+    cd {{ web_dir }} && npm ci --no-audit --no-fund
     cd {{ web_dir }} && npm run build
 
 # dev server for react SPA (proxies /api, /ws -> 127.0.0.1:8080)
@@ -23,6 +23,18 @@ go-build:
 # go test short
 go-test:
     go test -short ./...
+
+# go tests including integration (needs docker)
+go-test-integration pkg="./...":
+    go test -count=1 {{ pkg }}
+
+# frontend tests
+web-test:
+    cd {{ web_dir }} && npm test
+
+# frontend lint
+web-lint:
+    cd {{ web_dir }} && npm run lint
 
 # go vet
 go-vet:
@@ -62,42 +74,39 @@ logs service="":
 webui-restart:
     docker compose up --build -d webui
 
-# rebuild + restart producer only
-producer-restart:
-    docker compose up --build -d producer
+# rebuild + restart trigger only
+trigger-restart:
+    docker compose up --build -d trigger
 
-# rebuild + restart every consumer
-consumer-restart:
-    docker compose up --build -d assess-consumer impl-consumer review-consumer
+# rebuild + restart both workers
+worker-restart:
+    docker compose up --build -d worker-claude worker-default
 
-# scale impl-consumer to N replicas
-scale-impl n="1":
-    docker compose up -d --scale impl-consumer={{ n }} impl-consumer
+# scale claude workers to N replicas
+scale-claude n="1":
+    docker compose up -d --scale worker-claude={{ n }} worker-claude
 
-# run webui locally against local redis
+# run migrations in docker (postgres must be up)
+migrate:
+    docker compose run --rm --build migrate
+
+# run migrations locally against local postgres
+run-migrate:
+    DATABASE_URL="${DATABASE_URL:-postgres://orchestrator:${POSTGRES_PASSWORD:-orchestrator}@127.0.0.1:5432/orchestrator?sslmode=disable}" go run ./cmd/migrate
+
+# run webui locally against local redis + postgres
 run-webui:
-    LISTEN_ADDR=127.0.0.1:8080 REDIS_URL="${REDIS_URL:-redis://127.0.0.1:6379}" go run ./cmd/webui
+    LISTEN_ADDR=127.0.0.1:8080 DATABASE_URL="${DATABASE_URL:-postgres://orchestrator:${POSTGRES_PASSWORD:-orchestrator}@127.0.0.1:5432/orchestrator?sslmode=disable}" REDIS_URL="${REDIS_URL:-redis://127.0.0.1:6379}" go run ./cmd/webui
 
-# run producer locally
-run-producer:
-    REDIS_URL="${REDIS_URL:-redis://127.0.0.1:6379}" go run ./cmd/producer
+# run trigger locally
+run-trigger:
+    DATABASE_URL="${DATABASE_URL:-postgres://orchestrator:${POSTGRES_PASSWORD:-orchestrator}@127.0.0.1:5432/orchestrator?sslmode=disable}" WORKFLOWS_DIR="{{ justfile_directory() }}/workflows" PROJECTS_CONFIG="{{ justfile_directory() }}/projects.json" go run ./cmd/trigger
 
-# run assess consumer locally
-run-assess-consumer:
-    REDIS_URL="${REDIS_URL:-redis://127.0.0.1:6379}" go run ./cmd/consumer --pipeline=assess
-
-# run impl consumer locally
-run-impl-consumer:
-    REDIS_URL="${REDIS_URL:-redis://127.0.0.1:6379}" go run ./cmd/consumer --pipeline=impl
-
-# run review consumer locally
-run-review-consumer:
-    REDIS_URL="${REDIS_URL:-redis://127.0.0.1:6379}" go run ./cmd/consumer --pipeline=review
+# run worker locally (own Claude config dir, never touches ~/.claude)
+run-worker queues="claude,default":
+    CLAUDE_CONFIG_DIR="{{ justfile_directory() }}/.cache/claude" CLAUDE_SYSTEM_PROMPT_FILE="{{ justfile_directory() }}/config/claude/headless.md" MEMORY_STATE_DIR="{{ justfile_directory() }}/.cache/memory" PROJECTS_ROOT="{{ justfile_directory() }}/.cache/projects" PROJECTS_CONFIG="{{ justfile_directory() }}/projects.json" DATABASE_URL="${DATABASE_URL:-postgres://orchestrator:${POSTGRES_PASSWORD:-orchestrator}@127.0.0.1:5432/orchestrator?sslmode=disable}" REDIS_URL="${REDIS_URL:-redis://127.0.0.1:6379}" go run ./cmd/worker --queues={{ queues }}
 
 # clean build artifacts (keeps dist/index.html placeholder for go:embed)
 clean:
     find {{ dist_dir }} -mindepth 1 ! -name index.html -exec rm -rf {} + 2>/dev/null || true
     rm -rf {{ web_dir }}/node_modules
-
-update-credential:
-    cp ~/.claude/.credentials.json ./config/claude/.credentials.json

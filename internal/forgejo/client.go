@@ -15,11 +15,8 @@ import (
 )
 
 const (
-	LabelImplement     = "To-do"
-	LabelInProgress    = "in-progress"
-	LabelDone          = "done"
-	LabelNeedsInfo     = "needs-info"
-	LabelProjectPrefix = "project:"
+	LabelDone      = "done"
+	LabelNeedsInfo = "needs-info"
 )
 
 type Client struct {
@@ -235,6 +232,8 @@ func (c *Client) CreatePR(owner, repo, title, body, head, base string) (models.F
 	if err := c.doRequest("POST", fmt.Sprintf("/api/v1/repos/%s/%s/pulls", owner, repo), payload, &pr); err != nil {
 		return models.ForgejoPR{}, err
 	}
+	pr.RepoOwner = owner
+	pr.RepoName = repo
 	return pr, nil
 }
 
@@ -322,4 +321,18 @@ func (c *Client) doRequest(method, path string, payload []byte, out any) error {
 		}
 	}
 	return nil
+}
+
+func (c *Client) CurrentUser() (string, error) {
+	body, err := c.get("/api/v1/user")
+	if err != nil {
+		return "", err
+	}
+	var raw struct {
+		Login string `json:"login"`
+	}
+	if err := json.Unmarshal(body, &raw); err != nil {
+		return "", fmt.Errorf("unmarshal user: %w", err)
+	}
+	return raw.Login, nil
 }

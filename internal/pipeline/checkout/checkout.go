@@ -7,6 +7,7 @@ import (
 
 	"ai-orchestration/internal/gitops"
 	"ai-orchestration/internal/pipeline/state"
+	"ai-orchestration/internal/projects"
 )
 
 type AssessCheckout struct {
@@ -18,12 +19,12 @@ type AssessCheckout struct {
 }
 
 func (p AssessCheckout) Run(_ context.Context, s *state.Assess) error {
-	owner, name, err := splitRepo(s.Proj.Repo)
+	repo, err := projects.SplitRepo(s.Proj.Repo)
 	if err != nil {
 		return err
 	}
 	path := s.Proj.Path(p.ProjectsRoot, p.WorkerID)
-	git := p.GitFactory(path, p.ForgejoURL, p.ForgejoToken, owner, name)
+	git := p.GitFactory(path, p.ForgejoURL, p.ForgejoToken, repo.Owner, repo.Name)
 	if err := git.EnsureRepo(); err != nil {
 		return fmt.Errorf("ensure repo: %w", err)
 	}
@@ -41,12 +42,12 @@ type ImplCheckout struct {
 }
 
 func (p ImplCheckout) Run(_ context.Context, s *state.Impl) error {
-	owner, name, err := splitRepo(s.Proj.Repo)
+	repo, err := projects.SplitRepo(s.Proj.Repo)
 	if err != nil {
 		return err
 	}
 	path := s.Proj.Path(p.ProjectsRoot, p.WorkerID)
-	git := p.GitFactory(path, p.ForgejoURL, p.ForgejoToken, owner, name)
+	git := p.GitFactory(path, p.ForgejoURL, p.ForgejoToken, repo.Owner, repo.Name)
 	if err := git.EnsureRepo(); err != nil {
 		return fmt.Errorf("ensure repo: %w", err)
 	}
@@ -67,25 +68,16 @@ func (p ReviewCheckout) Run(_ context.Context, s *state.Review) error {
 	if s.Proj.Repo == "" {
 		return fmt.Errorf("review checkout: project config missing repo")
 	}
-	owner, name, err := splitRepo(s.Proj.Repo)
+	repo, err := projects.SplitRepo(s.Proj.Repo)
 	if err != nil {
 		return err
 	}
 	path := s.Proj.Path(p.ProjectsRoot, p.WorkerID)
-	git := p.GitFactory(path, p.ForgejoURL, p.ForgejoToken, owner, name)
+	git := p.GitFactory(path, p.ForgejoURL, p.ForgejoToken, repo.Owner, repo.Name)
 	if err := git.EnsureRepo(); err != nil {
 		return fmt.Errorf("ensure repo: %w", err)
 	}
 	s.ProjectPath = path
 	slog.Debug("review checkout ready", "path", path)
 	return nil
-}
-
-func splitRepo(repo string) (owner, name string, err error) {
-	for i := 0; i < len(repo); i++ {
-		if repo[i] == '/' {
-			return repo[:i], repo[i+1:], nil
-		}
-	}
-	return "", "", fmt.Errorf("invalid repo %q (expected owner/name)", repo)
 }

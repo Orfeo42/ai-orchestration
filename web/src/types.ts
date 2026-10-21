@@ -1,40 +1,8 @@
-export type Service = "orchestrator" | "reviewer";
-
-export type Phase =
-  | "assessing"
-  | "implementing"
-  | "testing"
-  | "pushing"
-  | "pr_description"
-  | "reviewing"
-  | "done"
-  | "failed"
-  | "cancelled";
-
 export interface TokenUsage {
   input: number;
   output: number;
   cache_creation_input: number;
   cache_read_input: number;
-}
-
-export interface Run {
-  id: string;
-  service: Service;
-  repo_owner: string;
-  repo_name: string;
-  issue_number?: number;
-  pr_number?: number;
-  title: string;
-  project?: string;
-  phase: Phase;
-  attempt: number;
-  started_at: string;
-  ended_at?: string;
-  usage: TokenUsage;
-  error?: string;
-  claude_session?: string;
-  inject_notes?: string[];
 }
 
 export type EventKind =
@@ -66,12 +34,6 @@ export interface RunEvent {
   service?: string;
   usage?: TokenUsage;
   result_text?: string;
-}
-
-export interface DailyTokensResponse {
-  from: string;
-  to: string;
-  daily: Record<string, TokenUsage>;
 }
 
 export type FileStatus = "added" | "deleted" | "modified" | "renamed";

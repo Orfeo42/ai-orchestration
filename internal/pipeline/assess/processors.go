@@ -10,8 +10,8 @@ import (
 	"ai-orchestration/internal/models"
 	"ai-orchestration/internal/pipeline"
 	"ai-orchestration/internal/pipeline/state"
-	"ai-orchestration/internal/queue"
 	"ai-orchestration/internal/runstore"
+	"ai-orchestration/internal/step"
 )
 
 type HydrateIssue struct{}
@@ -56,7 +56,7 @@ func (p AssessClarity) Run(ctx context.Context, s *state.Assess) error {
 	s.Handle.SetPhase(ctx, runstore.PhaseAssessing)
 	result, err := p.Claude.AssessIssue(ctx, s.Issue, s.Comments, s.Proj.Path(p.ProjectsRoot, p.WorkerID), s.Handle.Sink())
 	if err != nil {
-		return fmt.Errorf("assess issue: %w", err)
+		return fmt.Errorf("%w: assess issue: %w", step.ErrUpstream, err)
 	}
 	s.Handle.AddUsage(ctx, result.Usage)
 	s.Handle.SetSession(ctx, result.SessionID)
@@ -64,25 +64,6 @@ func (p AssessClarity) Run(ctx context.Context, s *state.Assess) error {
 	s.Result = result
 	if !result.Assessment.Clear {
 		return pipeline.ErrIssueUnclear
-	}
-	return nil
-}
-
-type EnqueueImpl struct {
-	Rq queue.Queue
-}
-
-func (p EnqueueImpl) Run(ctx context.Context, s *state.Assess) error {
-	job := models.ImplJob{
-		RepoOwner:   s.Job.RepoOwner,
-		RepoName:    s.Job.RepoName,
-		IssueNumber: s.Job.IssueNumber,
-		IssueTitle:  s.Job.IssueTitle,
-		IssueBody:   s.Job.IssueBody,
-		Project:     s.Job.Project,
-	}
-	if err := p.Rq.Push(ctx, queue.QueueImpl, job); err != nil {
-		return fmt.Errorf("enqueue impl job: %w", err)
 	}
 	return nil
 }

@@ -11,7 +11,6 @@ import (
 	"syscall"
 
 	"ai-orchestration/internal/control"
-	"ai-orchestration/internal/queue"
 	"ai-orchestration/internal/runstore"
 )
 
@@ -33,16 +32,12 @@ func ConfigureGit(name, email string) error {
 	return nil
 }
 
-func NewStore(url string) (*runstore.RedisStore, error) {
-	return runstore.NewRedis(url)
+func NewEventStore(url string) (*runstore.RedisEvents, error) {
+	return runstore.NewRedisEvents(url)
 }
 
 func NewControl(url string) (*control.RedisChannel, error) {
 	return control.NewRedis(url)
-}
-
-func NewQueue(url string) (*queue.RedisQueue, error) {
-	return queue.New(url)
 }
 
 func MustEnv(key string) string {

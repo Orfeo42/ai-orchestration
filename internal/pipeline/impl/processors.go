@@ -2,7 +2,6 @@ package impl
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"log/slog"
 	"regexp"
@@ -15,8 +14,8 @@ import (
 	"ai-orchestration/internal/models"
 	"ai-orchestration/internal/pipeline"
 	"ai-orchestration/internal/pipeline/state"
-	"ai-orchestration/internal/queue"
 	"ai-orchestration/internal/runstore"
+	"ai-orchestration/internal/step"
 )
 
 const MaxAttempts = 3
@@ -119,21 +118,23 @@ type ImplementAttempt struct {
 
 func (p ImplementAttempt) Run(ctx context.Context, s *state.Impl) error {
 	notes := s.Handle.DrainNotes()
-	impl, err := p.Claude.ImplementIssue(ctx, s.Issue, s.FreshComments, s.ProjectPath, "", withNotes(s.TestError, notes), s.Handle.Sink())
-	if err != nil {
-		if pending := s.Handle.DrainNotes(); len(pending) > 0 || ctx.Err() != nil {
-			s.Handle.PrependNotes(pending)
-			s.Handle.AddUsage(ctx, impl.Usage)
-			if ctx.Err() != nil {
-				return ctx.Err()
-			}
-			s.Attempt--
-			return nil
-		}
-		return fmt.Errorf("claude impl: %w", err)
-	}
+	ictx, cancel := s.Handle.Interruptible(ctx)
+	defer cancel()
+	impl, err := p.Claude.ImplementIssue(ictx, s.Issue, s.FreshComments, s.ProjectPath, "", withNotes(s.TestError, notes), s.Handle.Sink())
 	s.Handle.AddUsage(ctx, impl.Usage)
-	s.ImplOutput = impl.Output
+	if err == nil {
+		s.ImplOutput = impl.Output
+		return nil
+	}
+	if ctx.Err() != nil {
+		return ctx.Err()
+	}
+	pending := s.Handle.DrainNotes()
+	if len(pending) == 0 {
+		return fmt.Errorf("%w: claude impl: %w", step.ErrUpstream, err)
+	}
+	s.Handle.PrependNotes(pending)
+	s.Attempt--
 	return nil
 }
 
@@ -174,120 +175,6 @@ func (p RunTests) Run(ctx context.Context, s *state.Impl) error {
 	return nil
 }
 
-type OpenPR struct {
-	Fj           forgejo.Forgejo
-	Rq           queue.Queue
-	PrWriter     PRDescWriter
-	ForgejoURL   string
-	CodeOwner    string
-	CodeName     string
-	BaseBranch   string
-}
-
-func (p OpenPR) Run(ctx context.Context, s *state.Impl) error {
-	s.Handle.SetPhase(ctx, runstore.PhasePushing)
-	if err := s.Git.AddAll(); err != nil {
-		return fmt.Errorf("git add: %w", err)
-	}
-	if err := s.Git.Commit(fmt.Sprintf("feat: implement issue #%d - %s", s.Job.IssueNumber, s.Job.IssueTitle)); err != nil {
-		return fmt.Errorf("git commit: %w", err)
-	}
-	if err := s.Git.Push(s.Branch); err != nil {
-		return fmt.Errorf("git push: %w", err)
-	}
-
-	prBody := fmt.Sprintf("Implements [%s/%s#%d](%s/%s/%s/issues/%d)",
-		s.Job.RepoOwner, s.Job.RepoName, s.Job.IssueNumber,
-		p.ForgejoURL, s.Job.RepoOwner, s.Job.RepoName, s.Job.IssueNumber)
-
-	pr, err := p.Fj.CreatePR(p.CodeOwner, p.CodeName, "feat: "+s.Job.IssueTitle, prBody, s.Branch, p.BaseBranch)
-	if err != nil {
-		return fmt.Errorf("create pr: %w", err)
-	}
-	s.PR = &pr
-	if s.Handle.Store() != nil {
-		if uerr := s.Handle.Store().Update(ctx, s.Handle.ID(), func(r *runstore.Run) { r.PRNumber = pr.Number }); uerr != nil {
-			slog.WarnContext(ctx, "update run pr number failed",
-				"run", s.Handle.ID(),
-				"error", uerr,
-			)
-		}
-	}
-
-	if p.PrWriter != nil {
-		p.writePRDescription(ctx, s, pr)
-	}
-	p.finalizeLabels(ctx, s)
-	return p.queueReview(ctx, s, pr)
-}
-
-func (p OpenPR) writePRDescription(ctx context.Context, s *state.Impl, pr models.ForgejoPR) {
-	diff, err := p.Fj.GetPRDiff(p.CodeOwner, p.CodeName, pr.Number)
-	if err != nil {
-		slog.WarnContext(ctx, "get pr diff failed",
-			"error", err,
-		)
-		return
-	}
-	if diff == "" {
-		return
-	}
-	s.Handle.SetPhase(ctx, runstore.PhasePRDesc)
-	desc, err := p.PrWriter.Generate(ctx, s.Issue, s.ProjectPath, diff, s.Handle.Sink())
-	if err != nil {
-		slog.WarnContext(ctx, "pr description generation failed",
-			"error", err,
-		)
-		return
-	}
-	body := fmt.Sprintf("relates to: %s/%s#%d\n\n%s", s.Job.RepoOwner, s.Job.RepoName, s.Job.IssueNumber, desc)
-	if err := p.Fj.UpdatePR(p.CodeOwner, p.CodeName, pr.Number, body); err != nil {
-		slog.WarnContext(ctx, "update pr body failed",
-			"error", err,
-		)
-	}
-}
-
-func (p OpenPR) finalizeLabels(ctx context.Context, s *state.Impl) {
-	if doneID, err := p.Fj.GetLabelID(s.Job.RepoOwner, s.Job.RepoName, forgejo.LabelDone); err == nil && doneID != nil {
-		if err := p.Fj.AddLabel(s.Job.RepoOwner, s.Job.RepoName, s.Job.IssueNumber, *doneID); err != nil {
-			slog.WarnContext(ctx, "add done label failed",
-				"error", err,
-			)
-		}
-	}
-	if ipID, err := p.Fj.GetLabelID(s.Job.RepoOwner, s.Job.RepoName, forgejo.LabelInProgress); err == nil && ipID != nil {
-		if err := p.Fj.RemoveLabel(s.Job.RepoOwner, s.Job.RepoName, s.Job.IssueNumber, *ipID); err != nil {
-			slog.WarnContext(ctx, "remove in-progress label failed",
-				"error", err,
-			)
-		}
-	}
-}
-
-func (p OpenPR) queueReview(ctx context.Context, s *state.Impl, pr models.ForgejoPR) error {
-	diff, _ := p.Fj.GetPRDiff(p.CodeOwner, p.CodeName, pr.Number)
-	job := models.ReviewJob{
-		RepoOwner:   p.CodeOwner,
-		RepoName:    p.CodeName,
-		PRNumber:    pr.Number,
-		PRTitle:     "feat: " + s.Job.IssueTitle,
-		PRBranch:    s.Branch,
-		Project:     s.Job.Project,
-		IssueNumber: s.Job.IssueNumber,
-		Diff:        diff,
-	}
-	if err := p.Rq.Push(ctx, queue.QueueReview, job); err != nil {
-		return fmt.Errorf("push review job: %w", err)
-	}
-	if err := s.Git.Checkout(p.BaseBranch); err != nil {
-		slog.WarnContext(ctx, "checkout base after PR failed",
-			"error", err,
-		)
-	}
-	return nil
-}
-
 var slugRe = regexp.MustCompile(`[^a-z0-9]+`)
 
 func branchSlug(title string) string {
@@ -309,6 +196,3 @@ func withNotes(testError *string, notes []string) *string {
 	}
 	return &combined
 }
-
-// Ensure loop terminates after maxAttempts with a meaningful error if tests never pass.
-var _ = errors.New

@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"log/slog"
 	"strings"
-	"time"
 
 	"ai-orchestration/internal/events"
 	"ai-orchestration/internal/models"
@@ -21,11 +20,11 @@ The diff for this branch is already pushed. Use the skill to produce the PR desc
 Output only the final markdown body, no preamble.`
 
 type ClaudePRDescWriter struct {
-	timeout time.Duration
+	rt Runtime
 }
 
-func NewPRDescWriter(timeout time.Duration) *ClaudePRDescWriter {
-	return &ClaudePRDescWriter{timeout: timeout}
+func NewPRDescWriter(rt Runtime) *ClaudePRDescWriter {
+	return &ClaudePRDescWriter{rt: rt}
 }
 
 func (c *ClaudePRDescWriter) Generate(ctx context.Context, issue models.ForgejoIssue, projectPath, _ string, sink events.Sink) (string, error) {
@@ -34,18 +33,12 @@ func (c *ClaudePRDescWriter) Generate(ctx context.Context, issue models.ForgejoI
 		"path", projectPath,
 	)
 
-	cctx, cancel := context.WithTimeout(ctx, c.timeout)
+	cctx, cancel := context.WithTimeout(ctx, c.rt.Timeout)
 	defer cancel()
 
 	prompt := fmt.Sprintf(claudePRDescPrompt, issue.Number, issue.Title, issue.Body)
 
-	out, err := runClaudeStream(cctx, projectPath, prompt, []string{
-		"--print",
-		"--dangerously-skip-permissions",
-		"--output-format", "stream-json",
-		"--verbose",
-		"--allowedTools", "Bash,Read,Glob,Grep",
-	}, sink)
+	out, err := runClaudeStream(cctx, projectPath, prompt, baseArgs(c.rt, "Bash,Read,Glob,Grep"), sink)
 	if err != nil {
 		return "", fmt.Errorf("claude pr desc: %w", err)
 	}

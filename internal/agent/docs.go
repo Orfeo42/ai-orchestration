@@ -8,7 +8,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"time"
 
 	"ai-orchestration/internal/events"
 	"ai-orchestration/internal/models"
@@ -31,11 +30,11 @@ Return ONLY the updated README content, no preamble.
 If no meaningful update is needed, return the original content unchanged.`
 
 type ClaudeDocsWriter struct {
-	timeout time.Duration
+	rt Runtime
 }
 
-func NewDocsWriter(timeout time.Duration) *ClaudeDocsWriter {
-	return &ClaudeDocsWriter{timeout: timeout}
+func NewDocsWriter(rt Runtime) *ClaudeDocsWriter {
+	return &ClaudeDocsWriter{rt: rt}
 }
 
 func (d *ClaudeDocsWriter) UpdateReadme(ctx context.Context, job models.ReviewJob, projectPath string, review models.ReviewResult, sink events.Sink) (bool, error) {
@@ -55,16 +54,10 @@ func (d *ClaudeDocsWriter) UpdateReadme(ctx context.Context, job models.ReviewJo
 	}
 	prompt := fmt.Sprintf(claudeDocsPrompt, job.PRTitle, review.Summary, existing, diff)
 
-	cctx, cancel := context.WithTimeout(ctx, d.timeout)
+	cctx, cancel := context.WithTimeout(ctx, d.rt.Timeout)
 	defer cancel()
 
-	out, err := runClaudeStream(cctx, projectPath, prompt, []string{
-		"--print",
-		"--dangerously-skip-permissions",
-		"--output-format", "stream-json",
-		"--verbose",
-		"--allowedTools", "Bash,Read,Glob,Grep",
-	}, sink)
+	out, err := runClaudeStream(cctx, projectPath, prompt, baseArgs(d.rt, "Bash,Read,Glob,Grep"), sink)
 	if err != nil {
 		return false, fmt.Errorf("claude docs: %w", err)
 	}

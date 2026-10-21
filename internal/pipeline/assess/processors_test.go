@@ -2,13 +2,9 @@ package assess
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"testing"
 	"time"
-
-	"github.com/alicebob/miniredis/v2"
-	redisClient "github.com/redis/go-redis/v9"
 
 	"ai-orchestration/internal/agent"
 	"ai-orchestration/internal/events"
@@ -17,20 +13,12 @@ import (
 	"ai-orchestration/internal/pipeline"
 	"ai-orchestration/internal/pipeline/state"
 	"ai-orchestration/internal/projects"
-	"ai-orchestration/internal/queue"
 	"ai-orchestration/internal/runstore"
 )
 
 func newHandle(t *testing.T) *runstore.RunHandle {
 	t.Helper()
-	mr := miniredis.RunT(t)
-	client := redisClient.NewClient(&redisClient.Options{Addr: mr.Addr()})
-	t.Cleanup(func() { _ = client.Close() })
-	store := runstore.NewRedisFromClient(client)
-	return runstore.NewRunHandle(context.Background(), store, nil, runstore.Run{
-		Service: runstore.ServiceAssess,
-		Phase:   runstore.PhaseAssessing,
-	})
+	return runstore.NewStepHandle(context.Background(), nil, nil, nil, "assess-1", runstore.ServiceOrchestrator)
 }
 
 func TestHydrateIssue(t *testing.T) {
@@ -117,31 +105,6 @@ func TestAssessClarity(t *testing.T) {
 		}
 		if s.Result.Assessment.Questions != "what scope?" {
 			t.Errorf("questions = %q, want preserved", s.Result.Assessment.Questions)
-		}
-	})
-}
-
-func TestEnqueueImpl(t *testing.T) {
-	t.Run("pushes ImplJob to queue:impl", func(t *testing.T) {
-		var got models.ImplJob
-		rq := &queue.MockQueue{
-			PushFunc: func(ctx context.Context, name string, v any) error {
-				if name != queue.QueueImpl {
-					t.Errorf("queue = %q, want %q", name, queue.QueueImpl)
-				}
-				b, _ := json.Marshal(v)
-				return json.Unmarshal(b, &got)
-			},
-		}
-		s := &state.Assess{Job: models.AssessJob{
-			RepoOwner: "o", RepoName: "r", IssueNumber: 9,
-			IssueTitle: "T", IssueBody: "B", Project: "o/a",
-		}}
-		if err := (EnqueueImpl{Rq: rq}).Run(context.Background(), s); err != nil {
-			t.Fatalf("unexpected err: %v", err)
-		}
-		if got.IssueNumber != 9 || got.IssueTitle != "T" || got.Project != "o/a" {
-			t.Errorf("impl job = %+v, want carry-forward", got)
 		}
 	})
 }

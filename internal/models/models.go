@@ -26,6 +26,9 @@ type ForgejoPR struct {
 	Number int    `json:"number"`
 	Title  string `json:"title"`
 	Body   string `json:"body"`
+
+	RepoOwner string `json:"repo_owner,omitempty"`
+	RepoName  string `json:"repo_name,omitempty"`
 }
 
 type AssessJob struct {

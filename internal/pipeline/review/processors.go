@@ -12,6 +12,7 @@ import (
 	"ai-orchestration/internal/models"
 	"ai-orchestration/internal/pipeline/state"
 	"ai-orchestration/internal/runstore"
+	"ai-orchestration/internal/step"
 )
 
 type ReviewPR struct {
@@ -22,7 +23,7 @@ func (p ReviewPR) Run(ctx context.Context, s *state.Review) error {
 	s.Handle.SetPhase(ctx, runstore.PhaseReviewing)
 	result, err := p.Reviewer.Review(ctx, s.Job, s.Handle.Sink())
 	if err != nil {
-		return fmt.Errorf("review: %w", err)
+		return fmt.Errorf("%w: review: %w", step.ErrUpstream, err)
 	}
 	s.Result = result
 	slog.InfoContext(ctx, "reviewed PR",
@@ -57,7 +58,7 @@ type UpdateReadme struct {
 func (p UpdateReadme) Run(ctx context.Context, s *state.Review) error {
 	updated, err := p.DocsWriter.UpdateReadme(ctx, s.Job, s.ProjectPath, s.Result, s.Handle.Sink())
 	if err != nil {
-		return fmt.Errorf("update readme: %w", err)
+		return fmt.Errorf("%w: update readme: %w", step.ErrUpstream, err)
 	}
 	if !updated {
 		return nil
@@ -83,7 +84,7 @@ type PostReview struct {
 
 func (p PostReview) Run(_ context.Context, s *state.Review) error {
 	if err := p.Fj.CreatePRReview(s.Job.RepoOwner, s.Job.RepoName, s.Job.PRNumber, buildReviewBody(s.Result), s.Result.Approved); err != nil {
-		return fmt.Errorf("post review: %w", err)
+		return fmt.Errorf("%w: post review: %w", step.ErrUpstream, err)
 	}
 	return nil
 }

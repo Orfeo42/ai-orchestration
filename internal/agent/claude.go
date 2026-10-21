@@ -20,12 +20,31 @@ import (
 
 var errEmptyAssessment = errors.New("empty assessment output")
 
-type ClaudeAgent struct {
-	timeout time.Duration
+type Runtime struct {
+	Timeout          time.Duration
+	SystemPromptFile string
 }
 
-func New(timeout time.Duration) *ClaudeAgent {
-	return &ClaudeAgent{timeout: timeout}
+func baseArgs(rt Runtime, tools string) []string {
+	args := []string{
+		"--print",
+		"--dangerously-skip-permissions",
+		"--output-format", "stream-json",
+		"--verbose",
+		"--allowedTools", tools,
+	}
+	if rt.SystemPromptFile != "" {
+		args = append(args, "--append-system-prompt-file", rt.SystemPromptFile)
+	}
+	return args
+}
+
+type ClaudeAgent struct {
+	rt Runtime
+}
+
+func New(rt Runtime) *ClaudeAgent {
+	return &ClaudeAgent{rt: rt}
 }
 
 const claudeAssessPrompt = `You are triaging a Forgejo issue before implementation.
@@ -71,18 +90,12 @@ func (a *ClaudeAgent) AssessIssue(ctx context.Context, issue models.ForgejoIssue
 		"comments", len(comments),
 	)
 
-	cctx, cancel := context.WithTimeout(ctx, a.timeout)
+	cctx, cancel := context.WithTimeout(ctx, a.rt.Timeout)
 	defer cancel()
 
 	prompt := fmt.Sprintf(claudeAssessPrompt, issue.Number, issue.Title, issue.Body, formatComments(comments))
 
-	out, err := runClaudeStream(cctx, projectPath, prompt, []string{
-		"--print",
-		"--dangerously-skip-permissions",
-		"--output-format", "stream-json",
-		"--verbose",
-		"--allowedTools", "Bash,Read,Glob,Grep",
-	}, sink)
+	out, err := runClaudeStream(cctx, projectPath, prompt, baseArgs(a.rt, "Bash,Read,Glob,Grep"), sink)
 	if err != nil {
 		return AssessResult{}, fmt.Errorf("claude assess: %w", err)
 	}
@@ -209,18 +222,12 @@ func (a *ClaudeAgent) ImplementIssue(ctx context.Context, issue models.ForgejoIs
 		"comments", len(comments),
 	)
 
-	args := []string{
-		"--print",
-		"--dangerously-skip-permissions",
-		"--output-format", "stream-json",
-		"--verbose",
-		"--allowedTools", "Bash,Read,Edit,Write,Glob,Grep",
-	}
+	args := baseArgs(a.rt, "Bash,Read,Edit,Write,Glob,Grep")
 	if sessionID != "" {
 		args = append(args, "--resume", sessionID)
 	}
 
-	cctx, cancel := context.WithTimeout(ctx, a.timeout)
+	cctx, cancel := context.WithTimeout(ctx, a.rt.Timeout)
 	defer cancel()
 
 	out, err := runClaudeStream(cctx, projectPath, prompt, args, sink)

@@ -1,14 +1,15 @@
-import { Link, NavLink, Outlet } from "react-router-dom";
-import { Activity, Coins, Workflow } from "lucide-react";
+import { Link, NavLink, Outlet } from "react-router";
+import { Activity, ChartColumn, GitBranch, Workflow } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ThemeToggle } from "@/components/ThemeToggle";
 
 const navItems = [
-  { to: "/", label: "Runs", icon: Activity, end: true },
-  { to: "/tokens", label: "Tokens", icon: Coins, end: false },
+  { to: "/", label: "Processes", icon: Activity, end: true },
+  { to: "/workflows", label: "Workflows", icon: GitBranch, end: false },
+  { to: "/analytics", label: "Analytics", icon: ChartColumn, end: false },
 ];
 
-export default function App() {
+export function App() {
   return (
     <div className="flex min-h-screen w-full bg-background text-foreground">
       <aside className="hidden w-60 shrink-0 border-r bg-card md:flex md:flex-col">

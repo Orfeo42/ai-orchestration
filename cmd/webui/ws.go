@@ -11,25 +11,45 @@ import (
 	"github.com/coder/websocket"
 
 	"ai-orchestration/internal/events"
-	"ai-orchestration/internal/runstore"
+	"ai-orchestration/internal/process"
 )
 
 type wsFrame struct {
-	Type  string         `json:"type"`
-	Run   *runstore.Run  `json:"run,omitempty"`
-	Event *events.Event  `json:"event,omitempty"`
-	Last  int64          `json:"last_seq,omitempty"`
-	Error string         `json:"error,omitempty"`
+	Type    string           `json:"type"`
+	StepRun *process.StepRun `json:"step_run,omitempty"`
+	Event   *events.Event    `json:"event,omitempty"`
+	Last    int64            `json:"last_seq,omitempty"`
+	Error   string           `json:"error,omitempty"`
 }
 
 const (
 	wsTailBlock     = 5 * time.Second
-	wsTailLimit     = 200
 	wsRunPollPeriod = 3 * time.Second
 )
 
-func (h *apiHandler) streamRun(w http.ResponseWriter, r *http.Request) {
+type wsTarget interface {
+	snapshot(ctx context.Context, frameType string) (wsFrame, bool, error)
+}
+
+type stepRunTarget struct {
+	reader processReader
+	id     string
+}
+
+func (t stepRunTarget) snapshot(ctx context.Context, frameType string) (wsFrame, bool, error) {
+	stepRun, err := t.reader.GetStepRun(ctx, t.id)
+	if err != nil {
+		return wsFrame{}, false, err
+	}
+	return wsFrame{Type: frameType, StepRun: &stepRun}, stepRun.Status != process.StepRunning, nil
+}
+
+func (h *processHandler) streamStepRun(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
+	serveWS(w, r, id, h.events, stepRunTarget{reader: h.reader, id: id})
+}
+
+func serveWS(w http.ResponseWriter, r *http.Request, id string, evts eventReader, target wsTarget) {
 	conn, err := websocket.Accept(w, r, &websocket.AcceptOptions{
 		OriginPatterns: []string{"*"},
 	})
@@ -48,7 +68,7 @@ func (h *apiHandler) streamRun(w http.ResponseWriter, r *http.Request) {
 	}()
 
 	ctx := conn.CloseRead(r.Context())
-	if err := h.wsServe(ctx, conn, id); err != nil && !errors.Is(err, context.Canceled) {
+	if err := wsServe(ctx, conn, id, evts, target); err != nil && !errors.Is(err, context.Canceled) {
 		slog.WarnContext(ctx, "ws serve ended",
 			"run", id,
 			"error", err,
@@ -56,13 +76,13 @@ func (h *apiHandler) streamRun(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (h *apiHandler) wsServe(ctx context.Context, conn *websocket.Conn, runID string) error {
-	run, err := h.store.Get(ctx, runID)
+func wsServe(ctx context.Context, conn *websocket.Conn, id string, evts eventReader, target wsTarget) error {
+	hello, _, err := target.snapshot(ctx, "hello")
 	if err != nil {
 		return writeFrame(ctx, conn, wsFrame{Type: "error", Error: err.Error()})
 	}
 
-	initial, err := h.store.EventsRange(ctx, runID, 0, 5000)
+	initial, err := evts.EventsRange(ctx, id, 0, 5000)
 	if err != nil {
 		return err
 	}
@@ -78,7 +98,8 @@ func (h *apiHandler) wsServe(ctx context.Context, conn *websocket.Conn, runID st
 		}
 	}
 
-	if err := writeFrame(ctx, conn, wsFrame{Type: "hello", Run: &run, Last: lastSeq}); err != nil {
+	hello.Last = lastSeq
+	if err := writeFrame(ctx, conn, hello); err != nil {
 		return err
 	}
 	for i := range initial {
@@ -93,37 +114,31 @@ func (h *apiHandler) wsServe(ctx context.Context, conn *websocket.Conn, runID st
 	for {
 		select {
 		case <-ctx.Done():
-			_ = writeFrame(context.Background(), conn, wsFrame{Type: "bye"})
+			if err := writeFrame(context.Background(), conn, wsFrame{Type: "bye"}); err != nil {
+				slog.WarnContext(ctx, "ws bye failed",
+					"run", id,
+					"error", err,
+				)
+			}
 			return ctx.Err()
 		case <-pollTick.C:
-			if updated, gerr := h.store.Get(ctx, runID); gerr == nil {
-				if err := writeFrame(ctx, conn, wsFrame{Type: "run_update", Run: &updated}); err != nil {
-					return err
-				}
-				if updated.Phase == runstore.PhaseDone || updated.Phase == runstore.PhaseFailed || updated.Phase == runstore.PhaseCancelled {
-					tail, terr := h.store.EventsTail(ctx, runID, lastStreamID, time.Second)
-					if terr != nil && !errors.Is(terr, context.Canceled) {
-						return terr
-					}
-					for i := range tail.Events {
-						if err := writeFrame(ctx, conn, wsFrame{Type: "event", Event: &tail.Events[i]}); err != nil {
-							return err
-						}
-					}
-					_ = writeFrame(context.Background(), conn, wsFrame{Type: "bye"})
-					return nil
-				}
+			done, err := wsPoll(ctx, conn, id, evts, target, lastStreamID)
+			if err != nil {
+				return err
+			}
+			if done {
+				return nil
 			}
 		default:
 		}
 
-		tail, err := h.store.EventsTail(ctx, runID, lastStreamID, wsTailBlock)
+		tail, err := evts.EventsTail(ctx, id, lastStreamID, wsTailBlock)
 		if err != nil {
 			if errors.Is(err, context.Canceled) {
 				return err
 			}
 			slog.WarnContext(ctx, "ws tail failed",
-				"run", runID,
+				"run", id,
 				"error", err,
 			)
 			continue
@@ -138,6 +153,35 @@ func (h *apiHandler) wsServe(ctx context.Context, conn *websocket.Conn, runID st
 			}
 		}
 	}
+}
+
+func wsPoll(ctx context.Context, conn *websocket.Conn, id string, evts eventReader, target wsTarget, lastStreamID string) (bool, error) {
+	update, terminal, err := target.snapshot(ctx, "run_update")
+	if err != nil {
+		return false, nil
+	}
+	if err := writeFrame(ctx, conn, update); err != nil {
+		return false, err
+	}
+	if !terminal {
+		return false, nil
+	}
+	tail, err := evts.EventsTail(ctx, id, lastStreamID, time.Second)
+	if err != nil && !errors.Is(err, context.Canceled) {
+		return false, err
+	}
+	for i := range tail.Events {
+		if err := writeFrame(ctx, conn, wsFrame{Type: "event", Event: &tail.Events[i]}); err != nil {
+			return false, err
+		}
+	}
+	if err := writeFrame(context.Background(), conn, wsFrame{Type: "bye"}); err != nil {
+		slog.WarnContext(ctx, "ws bye failed",
+			"run", id,
+			"error", err,
+		)
+	}
+	return true, nil
 }
 
 func writeFrame(ctx context.Context, conn *websocket.Conn, frame wsFrame) error {

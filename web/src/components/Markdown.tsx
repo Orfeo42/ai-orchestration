@@ -2,12 +2,12 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { cn } from "@/lib/utils";
 
-interface Props {
+type Props = {
   text: string;
   className?: string;
-}
+};
 
-export default function Markdown({ text, className }: Props) {
+export function Markdown({ text, className }: Props) {
   return (
     <div
       className={cn(
