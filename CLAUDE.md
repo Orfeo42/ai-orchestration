@@ -30,7 +30,7 @@ Use `justfile` — every workflow has a recipe (`just --list`).
 
 Single test: `go test -run TestParseClaudeLine/assistant_tool_use ./internal/events/...`.
 
-CI is `.github/workflows/ci.yml` (GitHub Actions): `go` (gofmt, vet, unit tests, `pluginapi` tests with `-race`), `go-integration` (full `go test`, testcontainers on the runner's Docker), `web` (lint, typecheck, Vitest, build) on every push and PR; on `main` the `publish` job builds `linux/amd64` images `ghcr.io/orfeo42/ai-orchestration-{worker,trigger,migrate,webui}` tagged `latest` + `sha-<commit>`. New deployable components (plugins) get a matrix entry there.
+CI is `.github/workflows/ci.yml` (GitHub Actions): `go` (gofmt, vet, unit tests, `pluginapi` tests with `-race`), `go-integration` (full `go test`, testcontainers on the runner's Docker), `web` (lint, typecheck, Vitest, build) on every push and PR; on `main` the `publish` job builds `linux/amd64` images `ghcr.io/orfeo42/ai-orchestration-{worker,trigger,migrate,webui}` tagged `latest` + `sha-<commit>`. New deployable components (plugins) get a matrix entry there. Dependabot (`.github/dependabot.yml`) opens one grouped weekly PR per ecosystem: Go modules (root, `pluginapi`, `.tools/*`), npm (`web`), GitHub Actions, Dockerfile base images, compose images.
 
 ## Plugin contract (in progress)
 
