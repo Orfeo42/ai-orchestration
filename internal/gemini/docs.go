@@ -11,7 +11,7 @@ import (
 	"github.com/Orfeo42/ai-orchestration/internal/events"
 	"github.com/Orfeo42/ai-orchestration/internal/models"
 
-	"github.com/google/generative-ai-go/genai"
+	"google.golang.org/genai"
 )
 
 const docsPrompt = `Update the README.md for this project based on the changes in a merged PR.
@@ -30,7 +30,6 @@ If no meaningful update is needed, return the original content unchanged.`
 
 type GeminiDocsWriter struct {
 	client *genai.Client
-	model  *genai.GenerativeModel
 }
 
 func NewDocsWriter(ctx context.Context, apiKey string) (*GeminiDocsWriter, error) {
@@ -40,7 +39,6 @@ func NewDocsWriter(ctx context.Context, apiKey string) (*GeminiDocsWriter, error
 	}
 	return &GeminiDocsWriter{
 		client: client,
-		model:  client.GenerativeModel("gemini-2.0-flash"),
 	}, nil
 }
 
@@ -60,7 +58,7 @@ func (d *GeminiDocsWriter) UpdateReadme(ctx context.Context, job models.ReviewJo
 	}
 	prompt := fmt.Sprintf(docsPrompt, job.PRTitle, review.Summary, existing, diff)
 
-	resp, err := d.model.GenerateContent(ctx, genai.Text(prompt))
+	resp, err := d.client.Models.GenerateContent(ctx, modelName, genai.Text(prompt), nil)
 	if err != nil {
 		return false, fmt.Errorf("generate content: %w", err)
 	}
@@ -82,6 +80,4 @@ func (d *GeminiDocsWriter) UpdateReadme(ctx context.Context, job models.ReviewJo
 	return true, nil
 }
 
-func (d *GeminiDocsWriter) Close() {
-	d.client.Close()
-}
+func (d *GeminiDocsWriter) Close() {}

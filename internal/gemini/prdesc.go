@@ -9,7 +9,7 @@ import (
 	"github.com/Orfeo42/ai-orchestration/internal/events"
 	"github.com/Orfeo42/ai-orchestration/internal/models"
 
-	"github.com/google/generative-ai-go/genai"
+	"google.golang.org/genai"
 )
 
 const prDescPrompt = `Write a pull request description for the following implementation.
@@ -28,7 +28,6 @@ Write a concise PR description in markdown. Include:
 
 type GeminiPRDescWriter struct {
 	client *genai.Client
-	model  *genai.GenerativeModel
 }
 
 func NewPRDescWriter(ctx context.Context, apiKey string) (*GeminiPRDescWriter, error) {
@@ -38,7 +37,6 @@ func NewPRDescWriter(ctx context.Context, apiKey string) (*GeminiPRDescWriter, e
 	}
 	return &GeminiPRDescWriter{
 		client: client,
-		model:  client.GenerativeModel("gemini-2.0-flash"),
 	}, nil
 }
 
@@ -50,7 +48,7 @@ func (p *GeminiPRDescWriter) Generate(ctx context.Context, issue models.ForgejoI
 		diff = diff[:50000]
 	}
 	prompt := fmt.Sprintf(prDescPrompt, issue.Number, issue.Title, issue.Body, diff)
-	resp, err := p.model.GenerateContent(ctx, genai.Text(prompt))
+	resp, err := p.client.Models.GenerateContent(ctx, modelName, genai.Text(prompt), nil)
 	if err != nil {
 		return "", fmt.Errorf("generate content: %w", err)
 	}
@@ -64,6 +62,4 @@ func (p *GeminiPRDescWriter) Generate(ctx context.Context, issue models.ForgejoI
 	return out, nil
 }
 
-func (p *GeminiPRDescWriter) Close() {
-	p.client.Close()
-}
+func (p *GeminiPRDescWriter) Close() {}

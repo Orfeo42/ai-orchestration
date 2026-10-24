@@ -8,7 +8,7 @@ import (
 	"github.com/Orfeo42/ai-orchestration/internal/events"
 	"github.com/Orfeo42/ai-orchestration/internal/models"
 
-	"github.com/google/generative-ai-go/genai"
+	"google.golang.org/genai"
 )
 
 const reviewPrompt = `Review this pull request diff. Be concise and direct.
@@ -29,7 +29,6 @@ SUGGESTIONS:
 
 type GeminiReviewer struct {
 	client *genai.Client
-	model  *genai.GenerativeModel
 }
 
 func NewReviewer(ctx context.Context, apiKey string) (*GeminiReviewer, error) {
@@ -39,7 +38,6 @@ func NewReviewer(ctx context.Context, apiKey string) (*GeminiReviewer, error) {
 	}
 	return &GeminiReviewer{
 		client: client,
-		model:  client.GenerativeModel("gemini-2.0-flash"),
 	}, nil
 }
 
@@ -48,7 +46,7 @@ func (r *GeminiReviewer) Review(ctx context.Context, job models.ReviewJob, sink 
 		"pr_number", job.PRNumber,
 	)
 	prompt := fmt.Sprintf(reviewPrompt, job.PRTitle, job.IssueNumber, job.Diff)
-	resp, err := r.model.GenerateContent(ctx, genai.Text(prompt))
+	resp, err := r.client.Models.GenerateContent(ctx, modelName, genai.Text(prompt), nil)
 	if err != nil {
 		return models.ReviewResult{}, fmt.Errorf("generate content: %w", err)
 	}
@@ -58,12 +56,7 @@ func (r *GeminiReviewer) Review(ctx context.Context, job models.ReviewJob, sink 
 		return models.ReviewResult{}, err
 	}
 	emitText(ctx, sink, text)
-	slog.DebugContext(ctx, "gemini review received",
-		"text", text,
-	)
 	return models.ParseReviewText(text), nil
 }
 
-func (r *GeminiReviewer) Close() {
-	r.client.Close()
-}
+func (r *GeminiReviewer) Close() {}
