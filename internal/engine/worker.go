@@ -108,7 +108,8 @@ func (w *StepWorker) Work(ctx context.Context, job *river.Job[StepArgs]) error {
 			ProcessID:  p.ID,
 			StepID:     job.Args.StepID,
 			Uses:       x.pr.stepDef.Uses,
-			Attempt:    job.Attempt,
+			Plugin:     x.pr.decl.Plugin,
+			Attempt:    job.Args.AttemptBase + job.Attempt,
 			RiverJobID: job.ID,
 			WorkerID:   e.cfg.WorkerID,
 			Status:     process.StepRunning,
@@ -126,7 +127,15 @@ func (w *StepWorker) Work(ctx context.Context, job *river.Job[StepArgs]) error {
 	}
 	h := w.handles(ctx, x.runID)
 	defer h.Cancel()
-	res, runErr := x.pr.runner.Run(h.Ctx(), step.Context{Process: p, StepRunID: x.runID, WorkerID: e.cfg.WorkerID, Handle: h})
+	res, runErr := x.pr.runner.Run(h.Ctx(), step.Context{
+		Process:   p,
+		StepID:    job.Args.StepID,
+		StepRunID: x.runID,
+		Attempt:   job.Args.AttemptBase + job.Attempt,
+		Timeout:   time.Duration(job.Args.TimeoutSeconds) * time.Second,
+		WorkerID:  e.cfg.WorkerID,
+		Handle:    h,
+	})
 	remoteCancel := errors.Is(context.Cause(ctx), river.ErrJobCancelledRemotely)
 	controlCancel := errors.Is(runErr, context.Canceled) && (ctx.Err() == nil || remoteCancel)
 	phase := process.StepSucceeded
@@ -136,7 +145,10 @@ func (w *StepWorker) Work(ctx context.Context, job *river.Job[StepArgs]) error {
 	case runErr != nil:
 		phase = process.StepFailed
 	}
-	h.Emit(bg, events.Event{Kind: events.KindRunEnd, Phase: string(phase)})
+	jobWait := runErr == nil && res.Wait != nil && res.Wait.Kind == process.WaitJob
+	if !jobWait {
+		h.Emit(bg, events.Event{Kind: events.KindRunEnd, Phase: string(phase)})
+	}
 	switch {
 	case runErr == nil && res.Wait != nil:
 		return w.wait(bg, x, res)
@@ -150,7 +162,77 @@ func (w *StepWorker) Work(ctx context.Context, job *river.Job[StepArgs]) error {
 	return w.failed(bg, x, runErr)
 }
 
+func (w *StepWorker) waitJob(ctx context.Context, x execution, res step.Result) error {
+	if res.Wait.Job == nil {
+		return w.finalFail(ctx, x, ErrMissingJobWait, process.ErrorKindInternal)
+	}
+	superseded := false
+	err := w.engine.store.InTx(ctx, func(ctx context.Context, tx process.Tx) error {
+		if err := tx.MergeVars(ctx, x.proc.ID, res.Vars); err != nil {
+			return fmt.Errorf("merge vars: %w", err)
+		}
+		ok, err := tx.SetWaiting(ctx, x.proc.ID, process.Wait{
+			Kind:  process.WaitJob,
+			Step:  x.job.Args.StepID,
+			Since: time.Now().UTC(),
+			Job: &process.JobWait{
+				StepRunID:        x.runID,
+				Plugin:           res.Wait.Job.Plugin,
+				Attempt:          x.job.Args.AttemptBase + x.job.Attempt,
+				HeartbeatSeconds: res.Wait.Job.HeartbeatSeconds,
+				Deadline:         res.Wait.Job.Deadline,
+			},
+		})
+		if err != nil {
+			return fmt.Errorf("set waiting: %w", err)
+		}
+		if ok {
+			return w.completer.CompleteTx(ctx, tx.SQL(), x.job)
+		}
+		superseded = true
+		if _, err := tx.FinishStepRun(ctx, process.StepResult{StepRunID: x.runID, Status: process.StepCancelled}); err != nil {
+			return fmt.Errorf("finish superseded step run: %w", err)
+		}
+		return w.completer.CompleteTx(ctx, tx.SQL(), x.job)
+	})
+	if err != nil {
+		return fmt.Errorf("settle job wait: %w", err)
+	}
+	if superseded {
+		w.cancelSupersededJob(ctx, x, res.Wait.Job.Plugin)
+		return nil
+	}
+	slog.InfoContext(ctx, "step waiting for plugin job",
+		slog.String("process_id", x.proc.ID),
+		slog.String("step", x.job.Args.StepID),
+		slog.String("plugin", res.Wait.Job.Plugin),
+		slog.String("step_run_id", x.runID),
+	)
+	return nil
+}
+
+func (w *StepWorker) cancelSupersededJob(ctx context.Context, x execution, plugin string) {
+	slog.InfoContext(ctx, "plugin job superseded before it was recorded, cancelling",
+		slog.String("process_id", x.proc.ID),
+		slog.String("step_run_id", x.runID),
+		slog.String("plugin", plugin),
+	)
+	if w.engine.cfg.Jobs == nil {
+		return
+	}
+	if err := w.engine.cfg.Jobs.CancelJob(ctx, plugin, x.runID); err != nil {
+		slog.WarnContext(ctx, "cancel superseded plugin job failed",
+			slog.String("step_run_id", x.runID),
+			slog.String("plugin", plugin),
+			slog.Any("error", err),
+		)
+	}
+}
+
 func (w *StepWorker) wait(ctx context.Context, x execution, res step.Result) error {
+	if res.Wait.Kind == process.WaitJob {
+		return w.waitJob(ctx, x, res)
+	}
 	err := w.engine.store.InTx(ctx, func(ctx context.Context, tx process.Tx) error {
 		ok, err := tx.FinishStepRun(ctx, process.StepResult{
 			StepRunID: x.runID,
@@ -295,6 +377,9 @@ func (w *StepWorker) interrupted(ctx context.Context, x execution, runErr error)
 }
 
 func (w *StepWorker) failed(ctx context.Context, x execution, runErr error) error {
+	if errors.Is(runErr, step.ErrPermanent) {
+		return w.finalFail(ctx, x, runErr, process.ErrorKindInternal)
+	}
 	kind := process.ErrorKindInternal
 	if errors.Is(runErr, step.ErrUpstream) {
 		kind = process.ErrorKindUpstream

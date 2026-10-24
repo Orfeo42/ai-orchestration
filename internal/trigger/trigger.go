@@ -1,10 +1,13 @@
 package trigger
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
+	"reflect"
 	"slices"
 	"strconv"
 	"strings"
@@ -16,7 +19,9 @@ import (
 	"github.com/Orfeo42/ai-orchestration/internal/projects"
 	"github.com/Orfeo42/ai-orchestration/internal/step"
 	"github.com/Orfeo42/ai-orchestration/internal/steps"
+	"github.com/Orfeo42/ai-orchestration/internal/template"
 	"github.com/Orfeo42/ai-orchestration/internal/workflow"
+	"github.com/Orfeo42/ai-orchestration/pluginapi"
 )
 
 //go:generate moq -rm -out trigger_mock.go . Engine:MockEngine Store:MockStore
@@ -40,6 +45,7 @@ type Engine interface {
 type Store interface {
 	UpsertWorkflowVersion(ctx context.Context, v process.WorkflowVersion) (process.WorkflowVersion, error)
 	LatestWorkflowVersions(ctx context.Context) ([]process.WorkflowVersion, error)
+	SeedWorkflow(ctx context.Context, name string, versionID int64) (bool, error)
 	ListWaiting(ctx context.Context, kind process.WaitKind) ([]process.Process, error)
 }
 
@@ -53,11 +59,11 @@ type Service struct {
 	fj    forgejo.Forgejo
 	store Store
 	eng   Engine
-	reg   *step.Registry
+	reg   step.Catalog
 	cfg   Config
 }
 
-func New(fj forgejo.Forgejo, store Store, eng Engine, reg *step.Registry, cfg Config) *Service {
+func New(fj forgejo.Forgejo, store Store, eng Engine, reg step.Catalog, cfg Config) *Service {
 	return &Service{fj: fj, store: store, eng: eng, reg: reg, cfg: cfg}
 }
 
@@ -65,14 +71,6 @@ func (s *Service) SyncWorkflows(ctx context.Context, dir string) error {
 	sources, err := workflow.LoadDir(dir, s.reg)
 	if err != nil {
 		return fmt.Errorf("load workflows: %w", err)
-	}
-	latest, err := s.store.LatestWorkflowVersions(ctx)
-	if err != nil {
-		return fmt.Errorf("latest workflow versions: %w", err)
-	}
-	previous := make(map[string]int64, len(latest))
-	for _, v := range latest {
-		previous[v.Name] = v.ID
 	}
 	for _, src := range sources {
 		def, err := json.Marshal(src.Definition)
@@ -88,8 +86,12 @@ func (s *Service) SyncWorkflows(ctx context.Context, dir string) error {
 		if err != nil {
 			return fmt.Errorf("upsert workflow %s: %w", src.Definition.Name, err)
 		}
-		if v.ID != previous[v.Name] {
-			slog.InfoContext(ctx, "workflow version registered",
+		seeded, err := s.store.SeedWorkflow(ctx, v.Name, v.ID)
+		if err != nil {
+			return fmt.Errorf("seed workflow %s: %w", v.Name, err)
+		}
+		if seeded {
+			slog.InfoContext(ctx, "workflow imported",
 				slog.String("workflow", v.Name),
 				slog.Int64("version_id", v.ID),
 				slog.String("hash", v.Hash),
@@ -286,4 +288,93 @@ func (s *Service) StartForIssue(ctx context.Context, workflowName, subjectKey st
 		return process.Process{}, fmt.Errorf("%w: %s", ErrProcessExists, subjectKey)
 	}
 	return res.Process, nil
+}
+
+func (s *Service) StartFromEvent(ctx context.Context, ev pluginapi.TriggerEvent) ([]string, error) {
+	payload := ev.Payload
+	if len(payload) == 0 {
+		payload = json.RawMessage(`{}`)
+	}
+	scope, err := json.Marshal(map[string]json.RawMessage{"payload": payload})
+	if err != nil {
+		return nil, fmt.Errorf("encode trigger payload: %w", err)
+	}
+	versions, err := s.store.LatestWorkflowVersions(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("latest workflow versions: %w", err)
+	}
+	ids := []string{}
+	for _, v := range versions {
+		var def workflow.Definition
+		if err := json.Unmarshal(v.Definition, &def); err != nil {
+			slog.ErrorContext(ctx, "decode workflow definition failed",
+				slog.String("workflow", v.Name),
+				slog.Any("error", err),
+			)
+			continue
+		}
+		if def.Trigger.Plugin != ev.Plugin || def.Trigger.Event != ev.Trigger {
+			continue
+		}
+		if !matches(ctx, def.Trigger.Match, scope) {
+			continue
+		}
+		res, err := s.eng.Start(ctx, engine.StartRequest{
+			WorkflowVersionID: v.ID,
+			Subject:           process.Subject{Kind: process.SubjectKind(ev.Subject.Kind), Key: ev.Subject.Key, URL: ev.Subject.URL},
+			Title:             ev.Subject.Title,
+			Vars:              process.Vars{"trigger": payload},
+		})
+		if err != nil {
+			return nil, fmt.Errorf("start process for workflow %s: %w", v.Name, err)
+		}
+		if !res.Created {
+			continue
+		}
+		ids = append(ids, res.Process.ID)
+		slog.InfoContext(ctx, "process started from plugin trigger",
+			slog.String("workflow", v.Name),
+			slog.String("process_id", res.Process.ID),
+			slog.String("plugin", ev.Plugin),
+			slog.String("trigger", ev.Trigger),
+			slog.String("subject", ev.Subject.Key),
+		)
+	}
+	return ids, nil
+}
+
+func matches(ctx context.Context, match map[string]json.RawMessage, scope json.RawMessage) bool {
+	for key, expected := range match {
+		expr, err := json.Marshal("${payload." + key + "}")
+		if err != nil {
+			slog.WarnContext(ctx, "encode trigger match expression failed", slog.String("key", key), slog.Any("error", err))
+			return false
+		}
+		found, err := template.Resolve(expr, scope)
+		if errors.Is(err, template.ErrUnresolved) {
+			return false
+		}
+		if err != nil {
+			slog.WarnContext(ctx, "trigger match expression failed", slog.String("key", key), slog.Any("error", err))
+			return false
+		}
+		var want any
+		wantDec := json.NewDecoder(bytes.NewReader(expected))
+		wantDec.UseNumber()
+		if err := wantDec.Decode(&want); err != nil {
+			slog.WarnContext(ctx, "decode trigger match value failed", slog.String("key", key), slog.Any("error", err))
+			return false
+		}
+		var got any
+		gotDec := json.NewDecoder(bytes.NewReader(found))
+		gotDec.UseNumber()
+		if err := gotDec.Decode(&got); err != nil {
+			slog.WarnContext(ctx, "decode trigger payload value failed", slog.String("key", key), slog.Any("error", err))
+			return false
+		}
+		if !reflect.DeepEqual(want, got) {
+			return false
+		}
+	}
+	return true
 }

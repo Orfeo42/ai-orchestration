@@ -3,6 +3,7 @@ module github.com/Orfeo42/ai-orchestration
 go 1.27.3
 
 require (
+	github.com/Orfeo42/ai-orchestration/pluginapi v0.0.0
 	github.com/alicebob/miniredis/v2 v2.37.0
 	github.com/coder/websocket v1.8.15
 	github.com/go-playground/validator/v10 v10.30.5
@@ -47,6 +48,7 @@ require (
 	github.com/go-playground/locales v0.14.2 // indirect
 	github.com/go-playground/universal-translator v0.18.2 // indirect
 	github.com/google/go-cmp v0.7.0 // indirect
+	github.com/google/jsonschema-go v0.4.3 // indirect
 	github.com/google/s2a-go v0.1.11 // indirect
 	github.com/googleapis/enterprise-certificate-proxy v0.3.24 // indirect
 	github.com/googleapis/gax-go/v2 v2.27.0 // indirect
@@ -107,3 +109,5 @@ require (
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20261019180522-ce908d29299b // indirect
 	google.golang.org/protobuf v1.36.12 // indirect
 )
+
+replace github.com/Orfeo42/ai-orchestration/pluginapi => ./pluginapi

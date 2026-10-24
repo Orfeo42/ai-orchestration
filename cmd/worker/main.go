@@ -140,6 +140,7 @@ func run(ctx context.Context, cfg config) error {
 	p, err := runtime.OpenPlatform(ctx, runtime.PlatformConfig{
 		DSN:      cfg.databaseURL,
 		Registry: reg,
+		Plugins:  cfg.plugins,
 		Control:  ctrl,
 		Engine:   engine.Config{WorkerID: cfg.workerID, DefaultTimeout: cfg.stepTimeout},
 		River: &river.Config{
@@ -178,6 +179,8 @@ func run(ctx context.Context, cfg config) error {
 	if err := river.AddWorkerSafely(workers, engine.NewStepWorker(p.Engine, p.Queue, handles, hooks)); err != nil {
 		return fmt.Errorf("add step worker: %w", err)
 	}
+
+	go p.RefreshPlugins(ctx, cfg.pluginRefresh)
 
 	if err := p.River.Start(context.WithoutCancel(ctx)); err != nil {
 		return fmt.Errorf("start river: %w", err)

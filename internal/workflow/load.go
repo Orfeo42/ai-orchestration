@@ -16,7 +16,7 @@ type Source struct {
 	Definition Definition
 }
 
-func LoadDir(dir string, reg *step.Registry) ([]Source, error) {
+func LoadDir(dir string, reg step.Catalog) ([]Source, error) {
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		return nil, fmt.Errorf("read workflow dir: %w", err)

@@ -88,11 +88,12 @@ type WaitKind string
 const (
 	WaitComment WaitKind = "comment"
 	WaitSignal  WaitKind = "signal"
+	WaitJob     WaitKind = "job"
 )
 
 func ParseWaitKind(s string) (WaitKind, error) {
 	switch WaitKind(s) {
-	case WaitComment, WaitSignal:
+	case WaitComment, WaitSignal, WaitJob:
 		return WaitKind(s), nil
 	}
 	return "", ErrInvalidKind
@@ -108,11 +109,20 @@ type Subject struct {
 	URL  string      `json:"url,omitempty"`
 }
 
+type JobWait struct {
+	StepRunID        string    `json:"step_run_id"`
+	Plugin           string    `json:"plugin"`
+	Attempt          int       `json:"attempt"`
+	HeartbeatSeconds int       `json:"heartbeat_seconds"`
+	Deadline         time.Time `json:"deadline"`
+}
+
 type Wait struct {
 	Kind          WaitKind  `json:"kind"`
 	Step          string    `json:"step"`
 	Since         time.Time `json:"since"`
 	ResumeOutcome string    `json:"resume_outcome"`
+	Job           *JobWait  `json:"job,omitempty"`
 }
 
 type Process struct {
@@ -141,6 +151,7 @@ type StepRun struct {
 	ProcessID     string            `json:"process_id"`
 	StepID        string            `json:"step_id"`
 	Uses          string            `json:"uses"`
+	Plugin        string            `json:"plugin,omitempty"`
 	Attempt       int               `json:"attempt"`
 	Iteration     int               `json:"iteration"`
 	RiverJobID    int64             `json:"river_job_id"`
@@ -153,6 +164,7 @@ type StepRun struct {
 	Usage         events.TokenUsage `json:"usage"`
 	ClaudeSession string            `json:"claude_session,omitempty"`
 	Output        Vars              `json:"output,omitempty"`
+	HeartbeatAt   *time.Time        `json:"heartbeat_at,omitempty"`
 	StartedAt     time.Time         `json:"started_at"`
 	EndedAt       *time.Time        `json:"ended_at,omitempty"`
 }
@@ -203,4 +215,12 @@ type Cursor struct {
 type Page struct {
 	Processes []Process `json:"processes"`
 	Next      *Cursor   `json:"next,omitempty"`
+}
+
+type StaleJob struct {
+	ProcessID string
+	StepRunID string
+	Plugin    string
+	Deadline  time.Time
+	Expired   bool
 }

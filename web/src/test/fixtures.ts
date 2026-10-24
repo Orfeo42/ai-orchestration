@@ -4,7 +4,7 @@ import type {
   StepRun,
   WorkflowVersion,
 } from "@/process-types";
-import type { TokenUsage } from "@/types";
+import type { Catalog, PluginRecord, TokenUsage } from "@/types";
 
 export const usage: TokenUsage = {
   input: 1200,
@@ -92,5 +92,67 @@ export function makeDetail(
     process: makeProcess(process),
     step_runs: stepRuns,
     workflow: makeWorkflow(),
+  };
+}
+
+export function makeCatalog(): Catalog {
+  return {
+    steps: [
+      {
+        name: "claude/implement",
+        description: "Implement the issue",
+        queue: "claude",
+        outcomes: ["ok", "error"],
+      },
+      {
+        name: "human/approve",
+        description: "Wait for approval",
+        queue: "default",
+        outcomes: ["approved", "rejected"],
+      },
+    ],
+    triggers: [
+      {
+        plugin: "forgejo",
+        name: "issue_labeled",
+        description: "Issue labeled",
+        payload_schema: {},
+      },
+    ],
+  };
+}
+
+export function makePlugin(
+  overrides: Partial<PluginRecord> = {},
+): PluginRecord {
+  return {
+    name: "forgejo",
+    base_url: "http://forgejo:8080",
+    manifest: {
+      protocol: "v1",
+      name: "forgejo",
+      version: "1.0.0",
+      description: "Forgejo plugin",
+      actions: [
+        {
+          name: "comment",
+          description: "Post a comment",
+          mode: "sync",
+          outcomes: ["ok", "error"],
+        },
+      ],
+      triggers: [
+        {
+          name: "issue_labeled",
+          description: "Issue labeled",
+          payload_schema: {},
+        },
+      ],
+    },
+    status: "ok",
+    checked_at: "2026-10-01T10:00:00Z",
+    created_at: "2026-10-01T09:00:00Z",
+    updated_at: "2026-10-01T10:00:00Z",
+    ...overrides,
   };
 }

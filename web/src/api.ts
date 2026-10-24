@@ -8,18 +8,21 @@ import type {
   StepRun,
   StepStats,
   TokenPoint,
+  WorkflowDefinition,
   WorkflowStats,
   WorkflowVersion,
 } from "./process-types";
-import type { RunDiffResponse, RunEvent } from "./types";
+import type { Catalog, PluginRecord, RunDiffResponse, RunEvent } from "./types";
 
 export class ApiError extends Error {
   readonly status: number;
+  readonly problems?: string[];
 
-  constructor(status: number, message: string) {
+  constructor(status: number, message: string, problems?: string[]) {
     super(message);
     this.name = "ApiError";
     this.status = status;
+    if (problems !== undefined) this.problems = problems;
   }
 }
 
@@ -35,29 +38,34 @@ function withQuery(path: string, params: QueryParams): string {
   return qs === "" ? path : `${path}?${qs}`;
 }
 
-async function readErrorMessage(resp: Response): Promise<string> {
+interface ErrorDetails {
+  message: string;
+  problems?: string[];
+}
+
+async function readError(resp: Response): Promise<ErrorDetails> {
   const fallback = `${String(resp.status)} ${resp.statusText}`.trim();
   try {
     const body: unknown = await resp.json();
-    if (
-      typeof body === "object" &&
-      body !== null &&
-      "error" in body &&
-      typeof body.error === "string" &&
-      body.error !== ""
-    ) {
-      return body.error;
-    }
-    return fallback;
+    if (typeof body !== "object" || body === null) return { message: fallback };
+    const message =
+      "error" in body && typeof body.error === "string" && body.error !== ""
+        ? body.error
+        : fallback;
+    const raw: unknown = "problems" in body ? body.problems : undefined;
+    if (!Array.isArray(raw)) return { message };
+    const problems = raw.filter((p): p is string => typeof p === "string");
+    return problems.length === 0 ? { message } : { message, problems };
   } catch {
-    return fallback;
+    return { message: fallback };
   }
 }
 
 async function send(path: string, init?: RequestInit): Promise<Response> {
   const resp = await fetch(path, init);
   if (!resp.ok) {
-    throw new ApiError(resp.status, await readErrorMessage(resp));
+    const details = await readError(resp);
+    throw new ApiError(resp.status, details.message, details.problems);
   }
   return resp;
 }
@@ -223,4 +231,53 @@ export async function getFailures(range: DateRange): Promise<FailureGroup[]> {
     withQuery("/api/analytics/failures", { ...range }),
   );
   return data.failures ?? [];
+}
+
+export async function getCatalog(): Promise<Catalog> {
+  const data = await getJSON<{
+    steps: Catalog["steps"] | null;
+    triggers: Catalog["triggers"] | null;
+  }>("/api/catalog");
+  return { steps: data.steps ?? [], triggers: data.triggers ?? [] };
+}
+
+export async function listPlugins(): Promise<PluginRecord[]> {
+  const data = await getJSON<PluginRecord[] | null>("/api/plugins");
+  return data ?? [];
+}
+
+export function registerPlugin(
+  name: string,
+  baseUrl: string,
+): Promise<PluginRecord> {
+  return postJSON<PluginRecord>("/api/plugins", {
+    name,
+    base_url: baseUrl,
+  });
+}
+
+export async function refreshPlugin(name: string): Promise<PluginRecord> {
+  const resp = await send(`/api/plugins/${encodeURIComponent(name)}/refresh`, {
+    method: "POST",
+  });
+  const data: unknown = await resp.json();
+  return data as PluginRecord;
+}
+
+export async function removePlugin(name: string): Promise<void> {
+  await send(`/api/plugins/${encodeURIComponent(name)}`, {
+    method: "DELETE",
+  });
+}
+
+export function saveWorkflow(
+  definition: WorkflowDefinition,
+): Promise<WorkflowVersion> {
+  return postJSON<WorkflowVersion>("/api/workflows", definition);
+}
+
+export async function deleteWorkflow(name: string): Promise<void> {
+  await send(`/api/workflows/${encodeURIComponent(name)}`, {
+    method: "DELETE",
+  });
 }

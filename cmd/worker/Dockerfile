@@ -1,6 +1,7 @@
 FROM golang:1.27.3-trixie AS builder
 WORKDIR /build
 COPY go.mod go.sum ./
+COPY pluginapi/go.mod pluginapi/go.sum ./pluginapi/
 RUN go mod download
 COPY . .
 RUN CGO_ENABLED=0 go build -o /worker ./cmd/worker

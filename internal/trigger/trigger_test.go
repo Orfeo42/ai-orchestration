@@ -1,10 +1,14 @@
 package trigger
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
+	"log/slog"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -19,6 +23,7 @@ import (
 	"github.com/Orfeo42/ai-orchestration/internal/projects"
 	"github.com/Orfeo42/ai-orchestration/internal/step"
 	"github.com/Orfeo42/ai-orchestration/internal/steps"
+	"github.com/Orfeo42/ai-orchestration/pluginapi"
 )
 
 const workflowYAML = `name: implement-issue
@@ -57,11 +62,11 @@ func versionFor(t *testing.T, id int64, yaml string) process.WorkflowVersion {
 	dir := t.TempDir()
 	writeWorkflow(t, dir, "w.yaml", yaml)
 	store := &MockStore{
-		LatestWorkflowVersionsFunc: func(context.Context) ([]process.WorkflowVersion, error) { return nil, nil },
 		UpsertWorkflowVersionFunc: func(_ context.Context, v process.WorkflowVersion) (process.WorkflowVersion, error) {
 			v.ID = id
 			return v, nil
 		},
+		SeedWorkflowFunc: func(context.Context, string, int64) (bool, error) { return true, nil },
 	}
 	svc := New(&forgejo.MockForgejo{}, store, &MockEngine{}, newRegistry(t), testConfig())
 	require.NoError(t, svc.SyncWorkflows(t.Context(), dir))
@@ -72,16 +77,16 @@ func versionFor(t *testing.T, id int64, yaml string) process.WorkflowVersion {
 }
 
 func TestSyncWorkflows(t *testing.T) {
-	t.Run("upserts each file", func(t *testing.T) {
+	t.Run("upserts and seeds each file", func(t *testing.T) {
 		dir := t.TempDir()
 		writeWorkflow(t, dir, "a.yaml", workflowYAML)
 		writeWorkflow(t, dir, "b.yaml", strings.Replace(workflowYAML, "implement-issue", "second", 1))
 		store := &MockStore{
-			LatestWorkflowVersionsFunc: func(context.Context) ([]process.WorkflowVersion, error) { return nil, nil },
 			UpsertWorkflowVersionFunc: func(_ context.Context, v process.WorkflowVersion) (process.WorkflowVersion, error) {
 				v.ID = 1
 				return v, nil
 			},
+			SeedWorkflowFunc: func(context.Context, string, int64) (bool, error) { return true, nil },
 		}
 		svc := New(&forgejo.MockForgejo{}, store, &MockEngine{}, newRegistry(t), testConfig())
 
@@ -94,6 +99,38 @@ func TestSyncWorkflows(t *testing.T) {
 		assert.Equal(t, workflowYAML, calls[0].V.SourceYAML)
 		assert.NotEmpty(t, calls[0].V.Hash)
 		assert.Contains(t, string(calls[0].V.Definition), "implement-issue")
+		seeds := store.SeedWorkflowCalls()
+		require.Len(t, seeds, 2)
+		assert.Equal(t, "implement-issue", seeds[0].Name)
+		assert.Equal(t, int64(1), seeds[0].VersionID)
+		assert.Equal(t, "second", seeds[1].Name)
+	})
+
+	t.Run("logs import only when seeded", func(t *testing.T) {
+		var buf bytes.Buffer
+		prev := slog.Default()
+		slog.SetDefault(slog.New(slog.NewTextHandler(&buf, nil)))
+		t.Cleanup(func() { slog.SetDefault(prev) })
+		dir := t.TempDir()
+		writeWorkflow(t, dir, "a.yaml", workflowYAML)
+		seeded := true
+		store := &MockStore{
+			UpsertWorkflowVersionFunc: func(_ context.Context, v process.WorkflowVersion) (process.WorkflowVersion, error) {
+				v.ID = 3
+				return v, nil
+			},
+			SeedWorkflowFunc: func(context.Context, string, int64) (bool, error) { return seeded, nil },
+		}
+		svc := New(&forgejo.MockForgejo{}, store, &MockEngine{}, newRegistry(t), testConfig())
+
+		require.NoError(t, svc.SyncWorkflows(t.Context(), dir))
+		assert.Contains(t, buf.String(), "workflow imported")
+
+		buf.Reset()
+		seeded = false
+		require.NoError(t, svc.SyncWorkflows(t.Context(), dir))
+		assert.NotContains(t, buf.String(), "workflow imported")
+		assert.Len(t, store.SeedWorkflowCalls(), 2)
 	})
 
 	t.Run("invalid dir returns error", func(t *testing.T) {
@@ -102,25 +139,27 @@ func TestSyncWorkflows(t *testing.T) {
 		require.Error(t, svc.SyncWorkflows(t.Context(), filepath.Join(t.TempDir(), "missing")))
 	})
 
-	t.Run("latest versions error returns error", func(t *testing.T) {
+	t.Run("upsert error returns error", func(t *testing.T) {
 		dir := t.TempDir()
 		writeWorkflow(t, dir, "a.yaml", workflowYAML)
 		store := &MockStore{
-			LatestWorkflowVersionsFunc: func(context.Context) ([]process.WorkflowVersion, error) { return nil, errBoom },
+			UpsertWorkflowVersionFunc: func(context.Context, process.WorkflowVersion) (process.WorkflowVersion, error) {
+				return process.WorkflowVersion{}, errBoom
+			},
 		}
 		svc := New(&forgejo.MockForgejo{}, store, &MockEngine{}, newRegistry(t), testConfig())
 
 		require.ErrorIs(t, svc.SyncWorkflows(t.Context(), dir), errBoom)
 	})
 
-	t.Run("upsert error returns error", func(t *testing.T) {
+	t.Run("seed error returns error", func(t *testing.T) {
 		dir := t.TempDir()
 		writeWorkflow(t, dir, "a.yaml", workflowYAML)
 		store := &MockStore{
-			LatestWorkflowVersionsFunc: func(context.Context) ([]process.WorkflowVersion, error) { return nil, nil },
-			UpsertWorkflowVersionFunc: func(context.Context, process.WorkflowVersion) (process.WorkflowVersion, error) {
-				return process.WorkflowVersion{}, errBoom
+			UpsertWorkflowVersionFunc: func(_ context.Context, v process.WorkflowVersion) (process.WorkflowVersion, error) {
+				return v, nil
 			},
+			SeedWorkflowFunc: func(context.Context, string, int64) (bool, error) { return false, errBoom },
 		}
 		svc := New(&forgejo.MockForgejo{}, store, &MockEngine{}, newRegistry(t), testConfig())
 
@@ -470,5 +509,185 @@ func TestStartForIssue(t *testing.T) {
 		assert.Equal(t, int64(7), eng.StartCalls()[0].Req.WorkflowVersionID)
 		assert.Equal(t, "ionstream/handbook#5", eng.StartCalls()[0].Req.Subject.Key)
 		assert.Equal(t, "billing", eng.StartCalls()[0].Req.Project)
+	})
+}
+
+func pluginVersion(id int64, plugin, event, match string) process.WorkflowVersion {
+	def := `{"name":"w` + strconv.FormatInt(id, 10) + `","trigger":{"plugin":"` + plugin + `","event":"` + event + `"`
+	if match != "" {
+		def += `,"match":` + match
+	}
+	def += `},"start":"a","steps":{}}`
+	return process.WorkflowVersion{ID: id, Name: "w" + strconv.FormatInt(id, 10), Definition: json.RawMessage(def)}
+}
+
+func pluginEvent(payload string) pluginapi.TriggerEvent {
+	return pluginapi.TriggerEvent{
+		Plugin:  "git",
+		Trigger: "push",
+		Subject: pluginapi.Subject{Kind: "repo", Key: "o/r", URL: "https://x/o/r", Title: "T"},
+		Payload: json.RawMessage(payload),
+	}
+}
+
+func TestStartFromEvent(t *testing.T) {
+	t.Run("starts matching workflow with subject and trigger var", func(t *testing.T) {
+		eng := createdEngine()
+		svc := New(&forgejo.MockForgejo{}, pollStore(pluginVersion(4, "git", "push", `{"branch":"main"}`)), eng, newRegistry(t), testConfig())
+
+		ids, err := svc.StartFromEvent(t.Context(), pluginEvent(`{"branch":"main","sha":"abc"}`))
+
+		require.NoError(t, err)
+		assert.Equal(t, []string{"p1"}, ids)
+		require.Len(t, eng.StartCalls(), 1)
+		req := eng.StartCalls()[0].Req
+		assert.Equal(t, int64(4), req.WorkflowVersionID)
+		assert.Equal(t, process.Subject{Kind: "repo", Key: "o/r", URL: "https://x/o/r"}, req.Subject)
+		assert.Equal(t, "T", req.Title)
+		assert.JSONEq(t, `{"branch":"main","sha":"abc"}`, string(req.Vars["trigger"]))
+	})
+
+	t.Run("no match value differs", func(t *testing.T) {
+		eng := createdEngine()
+		svc := New(&forgejo.MockForgejo{}, pollStore(pluginVersion(4, "git", "push", `{"branch":"main"}`)), eng, newRegistry(t), testConfig())
+
+		ids, err := svc.StartFromEvent(t.Context(), pluginEvent(`{"branch":"dev"}`))
+
+		require.NoError(t, err)
+		assert.NotNil(t, ids)
+		assert.Empty(t, ids)
+		assert.Empty(t, eng.StartCalls())
+	})
+
+	t.Run("nested path match", func(t *testing.T) {
+		eng := createdEngine()
+		svc := New(&forgejo.MockForgejo{}, pollStore(pluginVersion(4, "git", "push", `{"repo.owner.name":"orfeo"}`)), eng, newRegistry(t), testConfig())
+
+		ids, err := svc.StartFromEvent(t.Context(), pluginEvent(`{"repo":{"owner":{"name":"orfeo"}}}`))
+
+		require.NoError(t, err)
+		assert.Len(t, ids, 1)
+	})
+
+	t.Run("equal numbers match", func(t *testing.T) {
+		eng := createdEngine()
+		svc := New(&forgejo.MockForgejo{}, pollStore(pluginVersion(4, "git", "push", `{"count":1}`)), eng, newRegistry(t), testConfig())
+
+		ids, err := svc.StartFromEvent(t.Context(), pluginEvent(`{"count":1}`))
+
+		require.NoError(t, err)
+		assert.Len(t, ids, 1)
+	})
+
+	t.Run("different numbers do not match", func(t *testing.T) {
+		eng := createdEngine()
+		svc := New(&forgejo.MockForgejo{}, pollStore(pluginVersion(4, "git", "push", `{"count":1}`)), eng, newRegistry(t), testConfig())
+
+		ids, err := svc.StartFromEvent(t.Context(), pluginEvent(`{"count":2}`))
+
+		require.NoError(t, err)
+		assert.Empty(t, ids)
+	})
+
+	t.Run("missing path does not match", func(t *testing.T) {
+		eng := createdEngine()
+		svc := New(&forgejo.MockForgejo{}, pollStore(pluginVersion(4, "git", "push", `{"branch":"main"}`)), eng, newRegistry(t), testConfig())
+
+		ids, err := svc.StartFromEvent(t.Context(), pluginEvent(`{"other":1}`))
+
+		require.NoError(t, err)
+		assert.Empty(t, ids)
+		assert.Empty(t, eng.StartCalls())
+	})
+
+	t.Run("syntax error key does not match", func(t *testing.T) {
+		eng := createdEngine()
+		svc := New(&forgejo.MockForgejo{}, pollStore(pluginVersion(4, "git", "push", `{"a}b":1}`)), eng, newRegistry(t), testConfig())
+
+		ids, err := svc.StartFromEvent(t.Context(), pluginEvent(`{"a":1}`))
+
+		require.NoError(t, err)
+		assert.Empty(t, ids)
+	})
+
+	t.Run("empty payload treated as empty object", func(t *testing.T) {
+		eng := createdEngine()
+		svc := New(&forgejo.MockForgejo{}, pollStore(pluginVersion(4, "git", "push", "")), eng, newRegistry(t), testConfig())
+
+		ids, err := svc.StartFromEvent(t.Context(), pluginEvent(""))
+
+		require.NoError(t, err)
+		assert.Len(t, ids, 1)
+		assert.JSONEq(t, `{}`, string(eng.StartCalls()[0].Req.Vars["trigger"]))
+	})
+
+	t.Run("wrong plugin or event is skipped", func(t *testing.T) {
+		eng := createdEngine()
+		store := pollStore(pluginVersion(4, "other", "push", ""), pluginVersion(5, "git", "tag", ""))
+		svc := New(&forgejo.MockForgejo{}, store, eng, newRegistry(t), testConfig())
+
+		ids, err := svc.StartFromEvent(t.Context(), pluginEvent(`{}`))
+
+		require.NoError(t, err)
+		assert.Empty(t, ids)
+		assert.Empty(t, eng.StartCalls())
+	})
+
+	t.Run("undecodable definition is skipped", func(t *testing.T) {
+		eng := createdEngine()
+		bad := process.WorkflowVersion{ID: 1, Name: "bad", Definition: json.RawMessage(`{`)}
+		svc := New(&forgejo.MockForgejo{}, pollStore(bad, pluginVersion(4, "git", "push", "")), eng, newRegistry(t), testConfig())
+
+		ids, err := svc.StartFromEvent(t.Context(), pluginEvent(`{}`))
+
+		require.NoError(t, err)
+		assert.Len(t, ids, 1)
+	})
+
+	t.Run("existing process is not collected", func(t *testing.T) {
+		eng := &MockEngine{
+			StartFunc: func(context.Context, engine.StartRequest) (engine.StartResult, error) {
+				return engine.StartResult{}, nil
+			},
+		}
+		svc := New(&forgejo.MockForgejo{}, pollStore(pluginVersion(4, "git", "push", "")), eng, newRegistry(t), testConfig())
+
+		ids, err := svc.StartFromEvent(t.Context(), pluginEvent(`{}`))
+
+		require.NoError(t, err)
+		assert.NotNil(t, ids)
+		assert.Empty(t, ids)
+	})
+
+	t.Run("engine error is returned", func(t *testing.T) {
+		eng := &MockEngine{
+			StartFunc: func(context.Context, engine.StartRequest) (engine.StartResult, error) {
+				return engine.StartResult{}, errBoom
+			},
+		}
+		svc := New(&forgejo.MockForgejo{}, pollStore(pluginVersion(4, "git", "push", "")), eng, newRegistry(t), testConfig())
+
+		_, err := svc.StartFromEvent(t.Context(), pluginEvent(`{}`))
+
+		require.ErrorIs(t, err, errBoom)
+	})
+
+	t.Run("latest versions error returns error", func(t *testing.T) {
+		store := &MockStore{
+			LatestWorkflowVersionsFunc: func(context.Context) ([]process.WorkflowVersion, error) { return nil, errBoom },
+		}
+		svc := New(&forgejo.MockForgejo{}, store, &MockEngine{}, newRegistry(t), testConfig())
+
+		_, err := svc.StartFromEvent(t.Context(), pluginEvent(`{}`))
+
+		require.ErrorIs(t, err, errBoom)
+	})
+
+	t.Run("invalid payload returns error", func(t *testing.T) {
+		svc := New(&forgejo.MockForgejo{}, &MockStore{}, &MockEngine{}, newRegistry(t), testConfig())
+
+		_, err := svc.StartFromEvent(t.Context(), pluginEvent(`{bad`))
+
+		require.Error(t, err)
 	})
 }

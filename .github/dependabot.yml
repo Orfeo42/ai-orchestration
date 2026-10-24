@@ -4,6 +4,7 @@ updates:
     directories:
       - /
       - /pluginapi
+      - /plugins/echo
       - /.tools/slogctx
       - /.tools/slogfmt
     schedule:
@@ -34,6 +35,7 @@ updates:
       - /cmd/trigger
       - /cmd/migrate
       - /web
+      - /plugins/echo
     schedule:
       interval: weekly
     groups:

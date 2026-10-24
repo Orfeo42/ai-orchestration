@@ -42,6 +42,7 @@ type stepRunRow struct {
 	ProcessID           string     `db:"process_id"`
 	StepID              string     `db:"step_id"`
 	Uses                string     `db:"uses"`
+	Plugin              string     `db:"plugin"`
 	Attempt             int        `db:"attempt"`
 	Iteration           int        `db:"iteration"`
 	RiverJobID          int64      `db:"river_job_id"`
@@ -57,8 +58,17 @@ type stepRunRow struct {
 	TokensCacheRead     int64      `db:"tokens_cache_read"`
 	ClaudeSession       string     `db:"claude_session"`
 	Output              string     `db:"output"`
+	HeartbeatAt         *time.Time `db:"heartbeat_at"`
 	StartedAt           time.Time  `db:"started_at"`
 	EndedAt             *time.Time `db:"ended_at"`
+}
+
+type staleJobRow struct {
+	ProcessID string    `db:"process_id"`
+	StepRunID string    `db:"step_run_id"`
+	Plugin    string    `db:"plugin"`
+	Deadline  time.Time `db:"deadline"`
+	Expired   bool      `db:"expired"`
 }
 
 type workflowVersionRow struct {
@@ -218,6 +228,7 @@ func toStepRun(r stepRunRow) (process.StepRun, error) {
 		ProcessID:  r.ProcessID,
 		StepID:     r.StepID,
 		Uses:       r.Uses,
+		Plugin:     r.Plugin,
 		Attempt:    r.Attempt,
 		Iteration:  r.Iteration,
 		RiverJobID: r.RiverJobID,
@@ -235,6 +246,7 @@ func toStepRun(r stepRunRow) (process.StepRun, error) {
 		},
 		ClaudeSession: r.ClaudeSession,
 		Output:        output,
+		HeartbeatAt:   r.HeartbeatAt,
 		StartedAt:     r.StartedAt,
 		EndedAt:       r.EndedAt,
 	}, nil

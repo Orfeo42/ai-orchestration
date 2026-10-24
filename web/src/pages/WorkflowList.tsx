@@ -1,5 +1,7 @@
 import { Link } from "react-router";
+import { Plus } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import {
   Table,
@@ -17,11 +19,19 @@ export function WorkflowList() {
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex flex-col gap-1">
-        <h1 className="text-2xl font-semibold tracking-tight">Workflows</h1>
-        <p className="text-sm text-muted-foreground">
-          Latest version of every workflow.
-        </p>
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex flex-col gap-1">
+          <h1 className="text-2xl font-semibold tracking-tight">Workflows</h1>
+          <p className="text-sm text-muted-foreground">
+            Latest version of every workflow.
+          </p>
+        </div>
+        <Button asChild size="sm">
+          <Link to="/workflows/new">
+            <Plus />
+            New workflow
+          </Link>
+        </Button>
       </div>
       {workflows.error && (
         <Alert variant="destructive">

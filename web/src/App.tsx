@@ -1,11 +1,12 @@
 import { Link, NavLink, Outlet } from "react-router";
-import { Activity, ChartColumn, GitBranch, Workflow } from "lucide-react";
+import { Activity, ChartColumn, GitBranch, Plug, Workflow } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ThemeToggle } from "@/components/ThemeToggle";
 
 const navItems = [
   { to: "/", label: "Processes", icon: Activity, end: true },
   { to: "/workflows", label: "Workflows", icon: GitBranch, end: false },
+  { to: "/plugins", label: "Plugins", icon: Plug, end: false },
   { to: "/analytics", label: "Analytics", icon: ChartColumn, end: false },
 ];
 

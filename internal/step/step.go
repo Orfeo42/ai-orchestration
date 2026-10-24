@@ -6,7 +6,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"slices"
+	"strings"
 	"sync"
+	"time"
 
 	"github.com/go-playground/validator/v10"
 
@@ -34,9 +36,16 @@ type Outcome string
 
 const OutcomeOK Outcome = "ok"
 
+type JobWait struct {
+	Plugin           string
+	HeartbeatSeconds int
+	Deadline         time.Time
+}
+
 type WaitRequest struct {
 	Kind          process.WaitKind
 	ResumeOutcome Outcome
+	Job           *JobWait
 }
 
 type Result struct {
@@ -47,7 +56,10 @@ type Result struct {
 
 type Context struct {
 	Process   process.Process
+	StepID    string
 	StepRunID string
+	Attempt   int
+	Timeout   time.Duration
 	WorkerID  string
 	Handle    *runstore.RunHandle
 }
@@ -59,9 +71,19 @@ type Step interface {
 type NoParams struct{}
 
 type Def struct {
-	Name     string
-	Queue    string
-	Outcomes []Outcome
+	Name        string
+	Description string
+	Queue       string
+	Outcomes    []Outcome
+	InputSchema json.RawMessage
+	Plugin      string
+}
+
+type Catalog interface {
+	Lookup(name string) (Def, bool)
+	Build(name string, params json.RawMessage) (Step, error)
+	Defs() []Def
+	HasTrigger(plugin, trigger string) bool
 }
 
 func (d Def) Declares(o Outcome) bool {
@@ -112,6 +134,19 @@ func (r *Registry) Lookup(name string) (Def, bool) {
 	return e.def, ok
 }
 
+func (r *Registry) Defs() []Def {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	defs := make([]Def, 0, len(r.entries))
+	for _, e := range r.entries {
+		defs = append(defs, e.def)
+	}
+	slices.SortFunc(defs, func(a, b Def) int { return strings.Compare(a.Name, b.Name) })
+	return defs
+}
+
+func (r *Registry) HasTrigger(string, string) bool { return false }
+
 func (r *Registry) Build(name string, params json.RawMessage) (Step, error) {
 	r.mu.RLock()
 	e, ok := r.entries[name]
@@ -137,4 +172,7 @@ func decodeParams[P any](v *validator.Validate, raw json.RawMessage) (P, error) 
 	return params, nil
 }
 
-const ErrUpstream stepError = "upstream dependency failed"
+const (
+	ErrUpstream  stepError = "upstream dependency failed"
+	ErrPermanent stepError = "permanent step failure"
+)
