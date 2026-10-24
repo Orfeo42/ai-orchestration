@@ -14,17 +14,37 @@ import (
 	"strings"
 	"time"
 
+	"ai-orchestration/internal/events"
 	"ai-orchestration/internal/models"
 )
 
 var errEmptyAssessment = errors.New("empty assessment output")
 
-type ClaudeAgent struct {
-	timeout time.Duration
+type Runtime struct {
+	Timeout          time.Duration
+	SystemPromptFile string
 }
 
-func New(timeout time.Duration) *ClaudeAgent {
-	return &ClaudeAgent{timeout: timeout}
+func baseArgs(rt Runtime, tools string) []string {
+	args := []string{
+		"--print",
+		"--dangerously-skip-permissions",
+		"--output-format", "stream-json",
+		"--verbose",
+		"--allowedTools", tools,
+	}
+	if rt.SystemPromptFile != "" {
+		args = append(args, "--append-system-prompt-file", rt.SystemPromptFile)
+	}
+	return args
+}
+
+type ClaudeAgent struct {
+	rt Runtime
+}
+
+func New(rt Runtime) *ClaudeAgent {
+	return &ClaudeAgent{rt: rt}
 }
 
 const claudeAssessPrompt = `You are triaging a Forgejo issue before implementation.
@@ -33,85 +53,135 @@ Issue #%d: %s
 
 %s
 
-Read project files as needed to understand context. Decide if the issue has enough detail to implement without guessing core behavior, public API, data model, or acceptance criteria.
+Existing comments (chronological, may contain clarifications from the author or reviewers):
+%s
+
+Read project files as needed to understand context. Treat comments as authoritative clarifications that extend or refine the issue body. Decide if the issue — including any clarifications in comments — has enough detail to implement without guessing core behavior, public API, data model, or acceptance criteria.
 
 Output exactly one JSON line, nothing else. No preamble, no code fences, no trailing text.
 Schema:
   {"clear": true}
   {"clear": false, "questions": "- what is missing or ambiguous\n- another point"}
 
-The "questions" field, when present, must be concise markdown bullet points addressed to the issue author.`
+The "questions" field, when present, must be concise markdown bullet points addressed to the issue author. Do not repeat questions already answered in the comments.`
 
-func (a *ClaudeAgent) AssessIssue(issue models.ForgejoIssue, projectPath string) (Assessment, error) {
-	slog.Info("assessing issue clarity",
-		"issue", issue.Number,
-		"path", projectPath,
-	)
-
-	ctx, cancel := context.WithTimeout(context.Background(), a.timeout)
-	defer cancel()
-
-	prompt := fmt.Sprintf(claudeAssessPrompt, issue.Number, issue.Title, issue.Body)
-
-	out, err := runClaudeStream(ctx, projectPath, prompt, []string{
-		"--print",
-		"--dangerously-skip-permissions",
-		"--output-format", "stream-json",
-		"--verbose",
-		"--allowedTools", "Bash,Read,Glob,Grep",
-	})
-	if err != nil {
-		return Assessment{}, fmt.Errorf("claude assess: %w", err)
+func formatComments(comments []models.IssueComment) string {
+	if len(comments) == 0 {
+		return "(no comments)"
 	}
-	if out == "" {
-		return Assessment{}, errEmptyAssessment
+	var b strings.Builder
+	for i, c := range comments {
+		if i > 0 {
+			b.WriteString("\n---\n")
+		}
+		author := c.Author
+		if author == "" {
+			author = "unknown"
+		}
+		fmt.Fprintf(&b, "@%s:\n%s", author, c.Body)
 	}
-	return parseAssessment(out)
+	return b.String()
 }
 
-func runClaudeStream(ctx context.Context, projectPath, prompt string, args []string) (string, error) {
+func (a *ClaudeAgent) AssessIssue(ctx context.Context, issue models.ForgejoIssue, comments []models.IssueComment, projectPath string, sink events.Sink) (AssessResult, error) {
+	slog.InfoContext(ctx, "assessing issue clarity",
+		"issue", issue.Number,
+		"path", projectPath,
+		"comments", len(comments),
+	)
+
+	cctx, cancel := context.WithTimeout(ctx, a.rt.Timeout)
+	defer cancel()
+
+	prompt := fmt.Sprintf(claudeAssessPrompt, issue.Number, issue.Title, issue.Body, formatComments(comments))
+
+	out, err := runClaudeStream(cctx, projectPath, prompt, baseArgs(a.rt, "Bash,Read,Glob,Grep"), sink)
+	if err != nil {
+		return AssessResult{}, fmt.Errorf("claude assess: %w", err)
+	}
+	if out.Result == "" {
+		return AssessResult{}, errEmptyAssessment
+	}
+	assess, err := parseAssessment(out.Result)
+	if err != nil {
+		return AssessResult{}, err
+	}
+	return AssessResult{Assessment: assess, SessionID: out.SessionID, Usage: out.Usage}, nil
+}
+
+type streamOutcome struct {
+	Result    string
+	SessionID string
+	Usage     events.TokenUsage
+	Output    string
+}
+
+func runClaudeStream(ctx context.Context, projectPath, prompt string, args []string, sink events.Sink) (streamOutcome, error) {
 	cmd := exec.CommandContext(ctx, "claude", args...)
 	cmd.Dir = projectPath
 	cmd.Stdin = strings.NewReader(prompt)
 
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
-		return "", fmt.Errorf("stdout pipe: %w", err)
+		return streamOutcome{}, fmt.Errorf("stdout pipe: %w", err)
 	}
 	var stderr bytes.Buffer
 	cmd.Stderr = io.MultiWriter(os.Stderr, &stderr)
 
 	if err := cmd.Start(); err != nil {
-		return "", fmt.Errorf("start claude: %w", err)
+		return streamOutcome{}, fmt.Errorf("start claude: %w", err)
 	}
 
-	var result string
+	outcome, err := consumeStream(ctx, stdout, sink)
+	if werr := cmd.Wait(); werr != nil {
+		if err == nil {
+			err = fmt.Errorf("claude exited: %w (stderr: %s)", werr, strings.TrimSpace(stderr.String()))
+		}
+	}
+	return outcome, err
+}
+
+func consumeStream(ctx context.Context, stdout io.Reader, sink events.Sink) (streamOutcome, error) {
+	if sink == nil {
+		sink = events.NoopSink{}
+	}
+	var (
+		outcome streamOutcome
+		buf     strings.Builder
+	)
 	scanner := bufio.NewScanner(stdout)
 	scanner.Buffer(make([]byte, 1024*1024), 1024*1024)
 	for scanner.Scan() {
 		line := scanner.Text()
+		buf.WriteString(line)
+		buf.WriteString("\n")
 		logEvent(line)
-		if r := resultFromEvent(line); r != "" {
-			result = r
+		for _, evt := range events.ParseClaudeLine(line) {
+			updateOutcome(&outcome, evt)
+			if err := sink.Emit(ctx, evt); err != nil {
+				slog.WarnContext(ctx, "sink emit failed",
+					"error", err,
+				)
+			}
 		}
 	}
-
-	if err := cmd.Wait(); err != nil {
-		return "", fmt.Errorf("claude exited: %w (stderr: %s)", err, strings.TrimSpace(stderr.String()))
+	outcome.Output = buf.String()
+	if err := scanner.Err(); err != nil {
+		return outcome, fmt.Errorf("scan stdout: %w", err)
 	}
-	return strings.TrimSpace(result), nil
+	return outcome, nil
 }
 
-func resultFromEvent(line string) string {
-	var event map[string]any
-	if err := json.Unmarshal([]byte(line), &event); err != nil {
-		return ""
+func updateOutcome(o *streamOutcome, evt events.Event) {
+	if evt.SessionID != "" {
+		o.SessionID = evt.SessionID
 	}
-	if event["type"] != "result" {
-		return ""
+	if evt.Usage != nil {
+		o.Usage = o.Usage.Add(*evt.Usage)
 	}
-	r, _ := event["result"].(string)
-	return r
+	if evt.Kind == events.KindResult && evt.ResultText != "" {
+		o.Result = evt.ResultText
+	}
 }
 
 func parseAssessment(out string) (Assessment, error) {
@@ -143,100 +213,37 @@ func lastJSONLine(s string) string {
 	return ""
 }
 
-func (a *ClaudeAgent) ImplementIssue(issue models.ForgejoIssue, projectPath string, testError *string, resume bool) (string, error) {
-	prompt := buildPrompt(issue, testError)
-	slog.Info("running claude agent",
+func (a *ClaudeAgent) ImplementIssue(ctx context.Context, issue models.ForgejoIssue, comments []models.IssueComment, projectPath, sessionID string, testError *string, sink events.Sink) (ImplementResult, error) {
+	prompt := buildPrompt(issue, comments, testError)
+	slog.InfoContext(ctx, "running claude agent",
 		"issue", issue.Number,
 		"path", projectPath,
-		"resume", resume,
+		"session", sessionID,
+		"comments", len(comments),
 	)
 
-	args := []string{
-		"--print",
-		"--dangerously-skip-permissions",
-		"--output-format", "stream-json",
-		"--verbose",
-		"--allowedTools", "Bash,Read,Edit,Write,Glob,Grep",
-	}
-	if resume {
-		args = append(args, "--continue")
+	args := baseArgs(a.rt, "Bash,Read,Edit,Write,Glob,Grep")
+	if sessionID != "" {
+		args = append(args, "--resume", sessionID)
 	}
 
-	cmd := exec.Command("claude", args...)
-	cmd.Dir = projectPath
+	cctx, cancel := context.WithTimeout(ctx, a.rt.Timeout)
+	defer cancel()
 
-	stdin, err := cmd.StdinPipe()
+	out, err := runClaudeStream(cctx, projectPath, prompt, args, sink)
 	if err != nil {
-		return "", fmt.Errorf("stdin pipe: %w", err)
-	}
-	stdout, err := cmd.StdoutPipe()
-	if err != nil {
-		return "", fmt.Errorf("stdout pipe: %w", err)
-	}
-	stderr, err := cmd.StderrPipe()
-	if err != nil {
-		return "", fmt.Errorf("stderr pipe: %w", err)
+		return ImplementResult{}, fmt.Errorf("claude impl: %w", err)
 	}
 
-	if err := cmd.Start(); err != nil {
-		return "", fmt.Errorf("start claude: %w", err)
+	finalSession := out.SessionID
+	if finalSession == "" {
+		finalSession = sessionID
 	}
-
-	if _, err := fmt.Fprint(stdin, prompt); err != nil {
-		return "", fmt.Errorf("write prompt: %w", err)
-	}
-
-	if err := stdin.Close(); err != nil {
-		slog.Error("stdin close failed",
-			"error", err,
-		)
-	}
-
-	var outLines []string
-	outDone := make(chan struct{})
-	go func() {
-		defer close(outDone)
-		scanner := bufio.NewScanner(stdout)
-		scanner.Buffer(make([]byte, 1024*1024), 1024*1024)
-		for scanner.Scan() {
-			line := scanner.Text()
-			outLines = append(outLines, line)
-			logEvent(line)
-		}
-	}()
-
-	errDone := make(chan struct{})
-	go func() {
-		defer close(errDone)
-		scanner := bufio.NewScanner(stderr)
-		for scanner.Scan() {
-			slog.Warn("claude stderr",
-				"output", scanner.Text(),
-			)
-		}
-	}()
-
-	waitDone := make(chan error, 1)
-	go func() {
-		<-outDone
-		<-errDone
-		waitDone <- cmd.Wait()
-	}()
-
-	select {
-	case err := <-waitDone:
-		if err != nil {
-			return "", fmt.Errorf("claude exited with error: %w", err)
-		}
-	case <-time.After(a.timeout):
-		_ = cmd.Process.Kill()
-		return "", fmt.Errorf("claude timed out after %s", a.timeout)
-	}
-
-	slog.Info("claude agent finished",
+	slog.InfoContext(ctx, "claude agent finished",
 		"issue", issue.Number,
+		"session", finalSession,
 	)
-	return strings.Join(outLines, "\n"), nil
+	return ImplementResult{Output: out.Output, SessionID: finalSession, Usage: out.Usage}, nil
 }
 
 func logEvent(line string) {
@@ -294,7 +301,7 @@ func logEvent(line string) {
 	}
 }
 
-func buildPrompt(issue models.ForgejoIssue, testError *string) string {
+func buildPrompt(issue models.ForgejoIssue, freshComments []models.IssueComment, testError *string) string {
 	base := fmt.Sprintf(`Implement the following issue for this project.
 
 Issue #%d: %s
@@ -306,6 +313,13 @@ Requirements:
 - Follow existing code style and conventions in the project
 - Do not add comments, docstrings, or documentation inline
 - Only modify files relevant to the issue`, issue.Number, issue.Title, issue.Body)
+
+	if len(freshComments) > 0 {
+		base += fmt.Sprintf(`
+
+New or edited issue comments since the previous turn (treat as authoritative clarifications that supersede or extend prior context):
+%s`, formatComments(freshComments))
+	}
 
 	if testError != nil {
 		base += fmt.Sprintf(`

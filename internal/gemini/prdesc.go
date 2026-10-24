@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"strings"
 
+	"ai-orchestration/internal/events"
 	"ai-orchestration/internal/models"
 
 	"github.com/google/generative-ai-go/genai"
@@ -41,7 +42,7 @@ func NewPRDescWriter(ctx context.Context, apiKey string) (*GeminiPRDescWriter, e
 	}, nil
 }
 
-func (p *GeminiPRDescWriter) Generate(ctx context.Context, issue models.ForgejoIssue, _, diff string) (string, error) {
+func (p *GeminiPRDescWriter) Generate(ctx context.Context, issue models.ForgejoIssue, _, diff string, sink events.Sink) (string, error) {
 	slog.InfoContext(ctx, "generating PR description",
 		"issue", issue.Number,
 	)
@@ -53,11 +54,14 @@ func (p *GeminiPRDescWriter) Generate(ctx context.Context, issue models.ForgejoI
 	if err != nil {
 		return "", fmt.Errorf("generate content: %w", err)
 	}
+	emitUsage(ctx, sink, resp)
 	text, err := responseText(resp)
 	if err != nil {
 		return "", err
 	}
-	return strings.TrimSpace(text), nil
+	out := strings.TrimSpace(text)
+	emitText(ctx, sink, out)
+	return out, nil
 }
 
 func (p *GeminiPRDescWriter) Close() {

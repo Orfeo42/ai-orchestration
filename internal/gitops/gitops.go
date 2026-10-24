@@ -3,7 +3,9 @@ package gitops
 import (
 	"fmt"
 	"log/slog"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 )
 
@@ -23,6 +25,25 @@ func New(repoPath, forgejoURL, token, owner, repo string) *GitOps {
 		repo:           repo,
 		remoteWithAuth: remote,
 	}
+}
+
+func (g *GitOps) EnsureRepo() error {
+	if _, err := os.Stat(filepath.Join(g.path, ".git")); err == nil {
+		slog.Debug("repo exists, fetching", "repo", g.owner+"/"+g.repo, "path", g.path)
+		return g.Fetch()
+	} else if !os.IsNotExist(err) {
+		return fmt.Errorf("stat .git: %w", err)
+	}
+	if err := os.MkdirAll(filepath.Dir(g.path), 0o755); err != nil {
+		return fmt.Errorf("mkdir parent: %w", err)
+	}
+	slog.Info("cloning repo", "repo", g.owner+"/"+g.repo, "path", g.path)
+	cmd := exec.Command("git", "clone", g.remoteWithAuth, g.path)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("git clone %s/%s: %w\n%s", g.owner, g.repo, err, out)
+	}
+	return nil
 }
 
 func (g *GitOps) CreateBranch(branch string) error {

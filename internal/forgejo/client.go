@@ -15,11 +15,8 @@ import (
 )
 
 const (
-	LabelImplement     = "To-do"
-	LabelInProgress    = "in-progress"
-	LabelDone          = "done"
-	LabelNeedsInfo     = "needs-info"
-	LabelProjectPrefix = "project:"
+	LabelDone      = "done"
+	LabelNeedsInfo = "needs-info"
 )
 
 type Client struct {
@@ -89,6 +86,95 @@ func (c *Client) GetIssues(owner, repo, label string, assignee *string) ([]model
 	return issues, nil
 }
 
+func (c *Client) GetIssue(owner, repo string, issueNumber int) (models.ForgejoIssue, error) {
+	body, err := c.get(fmt.Sprintf("/api/v1/repos/%s/%s/issues/%d", owner, repo, issueNumber))
+	if err != nil {
+		return models.ForgejoIssue{}, err
+	}
+
+	var raw struct {
+		ID     int    `json:"id"`
+		Number int    `json:"number"`
+		Title  string `json:"title"`
+		Body   string `json:"body"`
+		Labels []struct {
+			Name string `json:"name"`
+		} `json:"labels"`
+	}
+	if err := json.Unmarshal(body, &raw); err != nil {
+		return models.ForgejoIssue{}, fmt.Errorf("unmarshal issue: %w", err)
+	}
+
+	labels := make([]string, len(raw.Labels))
+	for i, l := range raw.Labels {
+		labels[i] = l.Name
+	}
+	return models.ForgejoIssue{
+		ID:        raw.ID,
+		Number:    raw.Number,
+		Title:     raw.Title,
+		Body:      raw.Body,
+		RepoOwner: owner,
+		RepoName:  repo,
+		Labels:    labels,
+	}, nil
+}
+
+func (c *Client) GetPR(owner, repo string, prNumber int) (PRDetails, error) {
+	body, err := c.get(fmt.Sprintf("/api/v1/repos/%s/%s/pulls/%d", owner, repo, prNumber))
+	if err != nil {
+		return PRDetails{}, err
+	}
+
+	var raw struct {
+		Number int    `json:"number"`
+		Title  string `json:"title"`
+		Body   string `json:"body"`
+		Head   struct {
+			Ref string `json:"ref"`
+		} `json:"head"`
+	}
+	if err := json.Unmarshal(body, &raw); err != nil {
+		return PRDetails{}, fmt.Errorf("unmarshal pr: %w", err)
+	}
+	return PRDetails{
+		Number: raw.Number,
+		Title:  raw.Title,
+		Body:   raw.Body,
+		Branch: raw.Head.Ref,
+	}, nil
+}
+
+func (c *Client) GetComments(owner, repo string, issueNumber int) ([]models.IssueComment, error) {
+	body, err := c.get(fmt.Sprintf("/api/v1/repos/%s/%s/issues/%d/comments", owner, repo, issueNumber))
+	if err != nil {
+		return nil, err
+	}
+
+	var raw []struct {
+		ID        int64     `json:"id"`
+		Body      string    `json:"body"`
+		UpdatedAt time.Time `json:"updated_at"`
+		User      struct {
+			Login string `json:"login"`
+		} `json:"user"`
+	}
+	if err := json.Unmarshal(body, &raw); err != nil {
+		return nil, fmt.Errorf("unmarshal comments: %w", err)
+	}
+
+	comments := make([]models.IssueComment, len(raw))
+	for i, r := range raw {
+		comments[i] = models.IssueComment{
+			ID:        r.ID,
+			Author:    r.User.Login,
+			Body:      r.Body,
+			UpdatedAt: r.UpdatedAt,
+		}
+	}
+	return comments, nil
+}
+
 func (c *Client) GetLabelID(owner, repo, name string) (*int, error) {
 	body, err := c.get(fmt.Sprintf("/api/v1/repos/%s/%s/labels", owner, repo))
 	if err != nil {
@@ -146,6 +232,8 @@ func (c *Client) CreatePR(owner, repo, title, body, head, base string) (models.F
 	if err := c.doRequest("POST", fmt.Sprintf("/api/v1/repos/%s/%s/pulls", owner, repo), payload, &pr); err != nil {
 		return models.ForgejoPR{}, err
 	}
+	pr.RepoOwner = owner
+	pr.RepoName = repo
 	return pr, nil
 }
 
@@ -233,4 +321,18 @@ func (c *Client) doRequest(method, path string, payload []byte, out any) error {
 		}
 	}
 	return nil
+}
+
+func (c *Client) CurrentUser() (string, error) {
+	body, err := c.get("/api/v1/user")
+	if err != nil {
+		return "", err
+	}
+	var raw struct {
+		Login string `json:"login"`
+	}
+	if err := json.Unmarshal(body, &raw); err != nil {
+		return "", fmt.Errorf("unmarshal user: %w", err)
+	}
+	return raw.Login, nil
 }

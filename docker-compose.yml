@@ -1,4 +1,44 @@
+x-database-url: &database-url postgres://orchestrator:${POSTGRES_PASSWORD}@postgres:5432/orchestrator?sslmode=disable
+
+x-forgejo-env: &forgejo-env
+  FORGEJO_URL: ${FORGEJO_URL}
+  FORGEJO_TOKEN: ${FORGEJO_TOKEN}
+
+x-projects-volume: &projects-config
+  ${PROJECTS_CONFIG_PATH:-./projects.json}:/config/projects.json:ro
+
+x-worker: &worker
+  build:
+    context: .
+    dockerfile: cmd/worker/Dockerfile
+  restart: unless-stopped
+  depends_on:
+    redis:
+      condition: service_healthy
+    migrate:
+      condition: service_completed_successfully
+  volumes:
+    - *projects-config
+    - projects_data:/projects
+
 services:
+  postgres:
+    image: postgres:18.6-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: orchestrator
+      POSTGRES_USER: orchestrator
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?}
+    volumes:
+      - postgres_data:/var/lib/postgresql
+    ports:
+      - "127.0.0.1:5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U orchestrator -d orchestrator"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
   redis:
     image: redis:7-alpine
     restart: unless-stopped
@@ -10,50 +50,93 @@ services:
       timeout: 3s
       retries: 5
 
-  orchestrator:
+  migrate:
     build:
       context: .
-      dockerfile: Dockerfile.orchestrator
-    restart: unless-stopped
+      dockerfile: cmd/migrate/Dockerfile
+    restart: "no"
     depends_on:
-      redis:
+      postgres:
         condition: service_healthy
     environment:
-      FORGEJO_URL: ${FORGEJO_URL}
-      FORGEJO_TOKEN: ${FORGEJO_TOKEN}
-      FORGEJO_ISSUE_REPOS: ${FORGEJO_ISSUE_REPOS}
-      FORGEJO_ASSIGNEE: ${FORGEJO_ASSIGNEE:-}
+      DATABASE_URL: *database-url
+
+  trigger:
+    build:
+      context: .
+      dockerfile: cmd/trigger/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    environment:
+      <<: *forgejo-env
+      DATABASE_URL: *database-url
+      POLL_INTERVAL: ${POLL_INTERVAL:-60s}
+      WORKFLOWS_DIR: /workflows
+      PROJECTS_CONFIG: /config/projects.json
+      TZ: Europe/Rome
+    volumes:
+      - *projects-config
+      - ./workflows:/workflows:ro
+
+  worker-claude:
+    <<: *worker
+    command: ["--queues=claude"]
+    environment:
+      <<: *forgejo-env
+      DATABASE_URL: *database-url
       REDIS_URL: ${REDIS_URL:-redis://redis:6379}
-      POLL_INTERVAL: ${POLL_INTERVAL:-60}
+      CLAUDE_CODE_OAUTH_TOKEN: ${CLAUDE_CODE_OAUTH_TOKEN:?}
+      MEMORY_SERVER_URL: ${MEMORY_SERVER_URL:?}
+      MEMORY_TOKEN: ${MEMORY_TOKEN:?}
       CLAUDE_TIMEOUT: ${CLAUDE_TIMEOUT:-3600}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
       GIT_USER_NAME: ${GIT_USER_NAME:-AI Orchestrator}
       GIT_USER_EMAIL: ${GIT_USER_EMAIL:-ai@orchestrator.local}
+      STEP_DEFAULT_TIMEOUT: ${STEP_DEFAULT_TIMEOUT:-2h}
+      JOB_RESCUE_AFTER: ${JOB_RESCUE_AFTER:-3h}
       PROJECTS_CONFIG: /config/projects.json
-      GEMINI_API_KEY: ${GEMINI_API_KEY}
       TZ: Europe/Rome
-    volumes:
-      - ${PROJECTS_CONFIG_PATH:-./projects.json}:/config/projects.json:ro
-      - projects_data:/projects
 
-  reviewer:
+  worker-default:
+    <<: *worker
+    command: ["--queues=default"]
+    environment:
+      <<: *forgejo-env
+      DATABASE_URL: *database-url
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379}
+      GIT_USER_NAME: ${GIT_USER_NAME:-AI Orchestrator}
+      GIT_USER_EMAIL: ${GIT_USER_EMAIL:-ai@orchestrator.local}
+      DEFAULT_QUEUE_MAX_WORKERS: ${DEFAULT_QUEUE_MAX_WORKERS:-4}
+      STEP_DEFAULT_TIMEOUT: ${STEP_DEFAULT_TIMEOUT:-2h}
+      JOB_RESCUE_AFTER: ${JOB_RESCUE_AFTER:-3h}
+      PROJECTS_CONFIG: /config/projects.json
+      TZ: Europe/Rome
+
+  webui:
     build:
       context: .
-      dockerfile: Dockerfile.reviewer
+      dockerfile: web/Dockerfile
     restart: unless-stopped
     depends_on:
       redis:
         condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
     environment:
-      FORGEJO_URL: ${FORGEJO_URL}
-      FORGEJO_TOKEN: ${FORGEJO_TOKEN}
-      GEMINI_API_KEY: ${GEMINI_API_KEY}
+      <<: *forgejo-env
+      DATABASE_URL: *database-url
+      LISTEN_ADDR: 0.0.0.0:8080
       REDIS_URL: ${REDIS_URL:-redis://redis:6379}
-      GIT_USER_NAME: ${GIT_USER_NAME:-AI Reviewer}
-      GIT_USER_EMAIL: ${GIT_USER_EMAIL:-ai-reviewer@orchestrator.local}
+      PROJECTS_CONFIG: /config/projects.json
       TZ: Europe/Rome
     volumes:
-      - projects_data:/projects
+      - *projects-config
+    ports:
+      - "127.0.0.1:8080:8080"
 
 volumes:
+  postgres_data:
   redis_data:
   projects_data:

@@ -3,19 +3,20 @@ package gemini
 import (
 	"context"
 
+	"ai-orchestration/internal/events"
 	"ai-orchestration/internal/models"
 )
 
-//go:generate moq -out mock.go . Reviewer:MockReviewer DocsWriter:MockDocsWriter PRDescWriter:MockPRDescWriter
+//go:generate moq -rm -out mock.go . Reviewer:MockReviewer DocsWriter:MockDocsWriter PRDescWriter:MockPRDescWriter
 
 type Reviewer interface {
-	Review(ctx context.Context, job models.ReviewJob) (models.ReviewResult, error)
+	Review(ctx context.Context, job models.ReviewJob, sink events.Sink) (models.ReviewResult, error)
 }
 
 type DocsWriter interface {
-	UpdateReadme(ctx context.Context, job models.ReviewJob, review models.ReviewResult) (bool, error)
+	UpdateReadme(ctx context.Context, job models.ReviewJob, projectPath string, review models.ReviewResult, sink events.Sink) (bool, error)
 }
 
 type PRDescWriter interface {
-	Generate(ctx context.Context, issue models.ForgejoIssue, projectPath, diff string) (string, error)
+	Generate(ctx context.Context, issue models.ForgejoIssue, projectPath, diff string, sink events.Sink) (string, error)
 }

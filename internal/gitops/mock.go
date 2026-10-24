@@ -35,6 +35,9 @@ var _ Git = &MockGit{}
 //			CreateBranchFunc: func(branch string) error {
 //				panic("mock out the CreateBranch method")
 //			},
+//			EnsureRepoFunc: func() error {
+//				panic("mock out the EnsureRepo method")
+//			},
 //			FetchFunc: func() error {
 //				panic("mock out the Fetch method")
 //			},
@@ -68,6 +71,9 @@ type MockGit struct {
 
 	// CreateBranchFunc mocks the CreateBranch method.
 	CreateBranchFunc func(branch string) error
+
+	// EnsureRepoFunc mocks the EnsureRepo method.
+	EnsureRepoFunc func() error
 
 	// FetchFunc mocks the Fetch method.
 	FetchFunc func() error
@@ -108,6 +114,9 @@ type MockGit struct {
 			// Branch is the branch argument value.
 			Branch string
 		}
+		// EnsureRepo holds details about calls to the EnsureRepo method.
+		EnsureRepo []struct {
+		}
 		// Fetch holds details about calls to the Fetch method.
 		Fetch []struct {
 		}
@@ -126,6 +135,7 @@ type MockGit struct {
 	lockCheckoutRemoteBranch sync.RWMutex
 	lockCommit               sync.RWMutex
 	lockCreateBranch         sync.RWMutex
+	lockEnsureRepo           sync.RWMutex
 	lockFetch                sync.RWMutex
 	lockHasChanges           sync.RWMutex
 	lockPush                 sync.RWMutex
@@ -315,6 +325,33 @@ func (mock *MockGit) CreateBranchCalls() []struct {
 	mock.lockCreateBranch.RLock()
 	calls = mock.calls.CreateBranch
 	mock.lockCreateBranch.RUnlock()
+	return calls
+}
+
+// EnsureRepo calls EnsureRepoFunc.
+func (mock *MockGit) EnsureRepo() error {
+	if mock.EnsureRepoFunc == nil {
+		panic("MockGit.EnsureRepoFunc: method is nil but Git.EnsureRepo was just called")
+	}
+	callInfo := struct {
+	}{}
+	mock.lockEnsureRepo.Lock()
+	mock.calls.EnsureRepo = append(mock.calls.EnsureRepo, callInfo)
+	mock.lockEnsureRepo.Unlock()
+	return mock.EnsureRepoFunc()
+}
+
+// EnsureRepoCalls gets all the calls that were made to EnsureRepo.
+// Check the length with:
+//
+//	len(mockedGit.EnsureRepoCalls())
+func (mock *MockGit) EnsureRepoCalls() []struct {
+} {
+	var calls []struct {
+	}
+	mock.lockEnsureRepo.RLock()
+	calls = mock.calls.EnsureRepo
+	mock.lockEnsureRepo.RUnlock()
 	return calls
 }
 

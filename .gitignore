@@ -4,16 +4,25 @@
 *.exe
 
 # env
-.env*
+.env
 
 # VS Code
 .vscode/
 
-# projects config (contains local paths)
+# projects config (local copy of projects.example.json)
 projects.json
 
-# Claude credentials (subscription auth)
-config/claude/.credentials.json
-
+# Local memory mirror
+.cache/
 
 .claude/
+
+# Frontend
+web/node_modules/
+cmd/webui/dist/assets/
+cmd/webui/dist/*.js
+cmd/webui/dist/*.css
+cmd/webui/dist/*.svg
+cmd/webui/dist/vite.svg
+# claude CLI credentials (auth is CLAUDE_CODE_OAUTH_TOKEN env)
+config/claude/.credentials.json

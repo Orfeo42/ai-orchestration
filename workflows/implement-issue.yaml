@@ -1,0 +1,57 @@
+name: implement-issue
+description: Assess a Forgejo issue, implement it, open a PR, review it and update the README
+trigger:
+  forgejo:
+    repos:
+      - ionstream/handbook
+    label: To-do
+start: start_labels
+steps:
+  start_labels:
+    uses: tracker.labels
+    with:
+      add: [in-progress]
+    on:
+      ok: assess
+  assess:
+    uses: claude.assess
+    timeout: 30m
+    retry: 2
+    on:
+      clear: implement
+      unclear: ask
+  ask:
+    uses: tracker.ask_clarification
+    on:
+      answered: assess
+  implement:
+    uses: claude.implement
+    with:
+      max_attempts: 3
+    timeout: 2h
+    on:
+      ok: describe
+      no_changes: fail
+      tests_failed: fail
+  describe:
+    uses: pr.describe
+    on:
+      ok: review
+  review:
+    uses: ai.review
+    with:
+      provider: gemini
+    on:
+      approved: docs
+      changes_requested: docs
+  docs:
+    uses: docs.readme
+    on:
+      ok: label_done
+  label_done:
+    uses: tracker.labels
+    with:
+      add: [done]
+      remove: [in-progress, needs-info]
+    on:
+      ok: end

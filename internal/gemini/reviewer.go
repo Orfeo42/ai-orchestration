@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 
+	"ai-orchestration/internal/events"
 	"ai-orchestration/internal/models"
 
 	"github.com/google/generative-ai-go/genai"
@@ -42,7 +43,7 @@ func NewReviewer(ctx context.Context, apiKey string) (*GeminiReviewer, error) {
 	}, nil
 }
 
-func (r *GeminiReviewer) Review(ctx context.Context, job models.ReviewJob) (models.ReviewResult, error) {
+func (r *GeminiReviewer) Review(ctx context.Context, job models.ReviewJob, sink events.Sink) (models.ReviewResult, error) {
 	slog.InfoContext(ctx, "requesting gemini review",
 		"pr_number", job.PRNumber,
 	)
@@ -51,10 +52,12 @@ func (r *GeminiReviewer) Review(ctx context.Context, job models.ReviewJob) (mode
 	if err != nil {
 		return models.ReviewResult{}, fmt.Errorf("generate content: %w", err)
 	}
+	emitUsage(ctx, sink, resp)
 	text, err := responseText(resp)
 	if err != nil {
 		return models.ReviewResult{}, err
 	}
+	emitText(ctx, sink, text)
 	slog.DebugContext(ctx, "gemini review received",
 		"text", text,
 	)

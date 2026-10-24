@@ -1,7 +1,12 @@
 package agent
 
 import (
+	"slices"
+	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"ai-orchestration/internal/models"
 )
@@ -9,7 +14,7 @@ import (
 func TestBuildPrompt(t *testing.T) {
 	t.Run("no test error", func(t *testing.T) {
 		issue := models.ForgejoIssue{Number: 42, Title: "Add login", Body: "Implement login flow"}
-		got := buildPrompt(issue, nil)
+		got := buildPrompt(issue, nil, nil)
 		if got == "" {
 			t.Error("prompt is empty")
 		}
@@ -30,7 +35,7 @@ func TestBuildPrompt(t *testing.T) {
 	t.Run("with test error appended", func(t *testing.T) {
 		issue := models.ForgejoIssue{Number: 1, Title: "Fix bug", Body: "desc"}
 		errMsg := "FAIL: TestSomething"
-		got := buildPrompt(issue, &errMsg)
+		got := buildPrompt(issue, nil, &errMsg)
 		if len(got) == 0 {
 			t.Fatal("prompt is empty")
 		}
@@ -44,6 +49,30 @@ func TestBuildPrompt(t *testing.T) {
 		}
 		if !found {
 			t.Errorf("prompt missing test error %q", needle)
+		}
+	})
+
+	t.Run("fresh comments rendered as authoritative clarifications", func(t *testing.T) {
+		issue := models.ForgejoIssue{Number: 9, Title: "Add search", Body: "Users need search"}
+		fresh := []models.IssueComment{
+			{ID: 1, Author: "alice", Body: "use fuzzy match"},
+			{ID: 2, Author: "bob", Body: "limit to 20 results"},
+		}
+		got := buildPrompt(issue, fresh, nil)
+		for _, want := range []string{"@alice", "use fuzzy match", "@bob", "limit to 20 results", "New or edited"} {
+			if !strings.Contains(got, want) {
+				t.Errorf("prompt missing %q", want)
+			}
+		}
+	})
+
+	t.Run("no fresh comments omits comments section", func(t *testing.T) {
+		issue := models.ForgejoIssue{Number: 10, Title: "X", Body: "Y"}
+		got := buildPrompt(issue, nil, nil)
+		for _, forbidden := range []string{"New or edited", "authoritative clarifications", "(no comments)"} {
+			if strings.Contains(got, forbidden) {
+				t.Errorf("prompt must omit %q when no fresh comments, got: %s", forbidden, got)
+			}
 		}
 	})
 }
@@ -141,5 +170,22 @@ func TestLogEvent(t *testing.T) {
 
 	t.Run("tool_result string no panic", func(t *testing.T) {
 		logEvent(`{"type":"tool_result","content":"some result"}`)
+	})
+}
+
+func TestBaseArgs(t *testing.T) {
+	t.Run("without system prompt file", func(t *testing.T) {
+		got := baseArgs(Runtime{}, "Bash,Read")
+		assert.NotContains(t, got, "--append-system-prompt-file")
+		idx := slices.Index(got, "--allowedTools")
+		require.NotEqual(t, -1, idx)
+		assert.Equal(t, "Bash,Read", got[idx+1])
+	})
+
+	t.Run("with system prompt file", func(t *testing.T) {
+		got := baseArgs(Runtime{SystemPromptFile: "/tmp/headless.md"}, "Bash,Read")
+		idx := slices.Index(got, "--append-system-prompt-file")
+		require.NotEqual(t, -1, idx)
+		assert.Equal(t, "/tmp/headless.md", got[idx+1])
 	})
 }

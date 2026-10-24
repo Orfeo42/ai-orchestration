@@ -128,5 +128,41 @@ func TestCreatePR(t *testing.T) {
 		if pr.Number != 42 {
 			t.Errorf("pr.Number = %d, want 42", pr.Number)
 		}
+		if pr.RepoOwner != "owner" || pr.RepoName != "repo" {
+			t.Errorf("pr repo = %s/%s, want owner/repo", pr.RepoOwner, pr.RepoName)
+		}
+	})
+}
+
+func TestCurrentUser(t *testing.T) {
+	t.Run("returns login of token owner", func(t *testing.T) {
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.URL.Path != "/api/v1/user" {
+				t.Errorf("path = %s, want /api/v1/user", r.URL.Path)
+			}
+			if _, err := w.Write([]byte(`{"login":"ai-bot","id":7}`)); err != nil {
+				t.Errorf("write: %v", err)
+			}
+		}))
+		defer srv.Close()
+
+		got, err := New(srv.URL, "tok").CurrentUser()
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if got != "ai-bot" {
+			t.Errorf("login = %q, want ai-bot", got)
+		}
+	})
+
+	t.Run("non-2xx is an error", func(t *testing.T) {
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusUnauthorized)
+		}))
+		defer srv.Close()
+
+		if _, err := New(srv.URL, "tok").CurrentUser(); err == nil {
+			t.Fatal("expected error")
+		}
 	})
 }
