@@ -30,6 +30,10 @@ Use `justfile` — every workflow has a recipe (`just --list`).
 
 Single test: `go test -run TestParseClaudeLine/assistant_tool_use ./internal/events/...`.
 
+## Plugin contract (in progress)
+
+`pluginapi/` is a separate Go module (`git.ionstream.ai/ionstream/ai-orchestrator/pluginapi`, wired through `go.work`) holding the plugin protocol v1: `PROTOCOL.md` (spec), `openapi.yaml` (HTTP contract), Go types (`Manifest`, `ActionSpec`, `JobRequest`, `Result`, `Progress`, `TriggerEvent`, …), the `Action`/`Reporter` interfaces, schema helpers (`CompileSchema`, `SchemaFor`), and subpackages `client` (`Plugin`: core → plugin, `Core`: plugin → core), `server` (`New`/`Serve`: the HTTP side every Go plugin uses) and `conformance` (`Run`: the mandatory suite). Target: the core only manages workflows and processes; AI, Forgejo, memory and notification become plugins that import `pluginapi` only. Plugins never import the core. Lint the spec with `npx @redocly/cli lint pluginapi/openapi.yaml`.
+
 ## Architecture that requires multiple files to understand
 
 ### Workflows

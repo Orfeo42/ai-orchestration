@@ -1,0 +1,408 @@
+openapi: 3.1.0
+info:
+  title: Orchestrator plugin protocol
+  version: "1"
+  description: Endpoints every plugin implements (called by the core) and the trigger endpoint the core exposes to plugins. Job callbacks go to the opaque per-job URLs in JobRequest.callback; their bodies are Result and Progress. See PROTOCOL.md.
+  license:
+    name: Proprietary
+servers:
+  - url: "{baseUrl}"
+    description: Plugin base URL for plugin operations, core base URL for core operations
+    variables:
+      baseUrl:
+        default: http://localhost:8080
+security:
+  - pluginToken: []
+paths:
+  /v1/manifest:
+    get:
+      operationId: getManifest
+      summary: Get the plugin manifest
+      tags: [plugin]
+      responses:
+        "200":
+          description: Plugin manifest
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Manifest" }
+        "401": { $ref: "#/components/responses/Error" }
+  /v1/health:
+    get:
+      operationId: getHealth
+      summary: Get plugin health
+      tags: [plugin]
+      responses:
+        "200":
+          description: Health
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Health" }
+        "401": { $ref: "#/components/responses/Error" }
+  /v1/actions/{action}/jobs:
+    post:
+      operationId: startJob
+      summary: Start a job for an action
+      tags: [plugin]
+      parameters:
+        - name: action
+          in: path
+          required: true
+          schema: { type: string, pattern: "^[a-z][a-z0-9_.]*$" }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/JobRequest" }
+      responses:
+        "200":
+          description: Job finished (sync action, or repeated job_id of a finished job)
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/JobState" }
+        "202":
+          description: Job accepted and running (async action, or repeated job_id of a running job)
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/JobState" }
+        "401": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+        "413": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+        "500": { $ref: "#/components/responses/Error" }
+        "502": { $ref: "#/components/responses/Error" }
+      callbacks:
+        result:
+          "{$request.body#/callback/result_url}":
+            post:
+              summary: Deliver the final job result
+              security: []
+              requestBody:
+                required: true
+                content:
+                  application/json:
+                    schema: { $ref: "#/components/schemas/Result" }
+              responses:
+                "204": { description: Result acknowledged }
+                "410": { $ref: "#/components/responses/Error" }
+        progress:
+          "{$request.body#/callback/progress_url}":
+            post:
+              summary: Report job progress and heartbeat
+              security: []
+              requestBody:
+                required: true
+                content:
+                  application/json:
+                    schema: { $ref: "#/components/schemas/Progress" }
+              responses:
+                "204": { description: Progress acknowledged }
+                "410": { $ref: "#/components/responses/Error" }
+  /v1/jobs/{job_id}:
+    get:
+      operationId: getJob
+      summary: Get job state
+      tags: [plugin]
+      parameters:
+        - $ref: "#/components/parameters/JobID"
+      responses:
+        "200":
+          description: Job state
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/JobState" }
+        "401": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+  /v1/jobs/{job_id}/cancel:
+    post:
+      operationId: cancelJob
+      summary: Cancel a job
+      tags: [plugin]
+      parameters:
+        - $ref: "#/components/parameters/JobID"
+      responses:
+        "200":
+          description: Job already terminal, cancel is a no-op
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/JobState" }
+        "202":
+          description: Cancel in progress
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/JobState" }
+        "401": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+  /v1/jobs/{job_id}/events:
+    get:
+      operationId: streamJobEvents
+      summary: Stream job events
+      tags: [plugin]
+      description: Only for actions with capability events. Each SSE message data is one Event as JSON; replays seq > after, then tails until the job is terminal.
+      parameters:
+        - $ref: "#/components/parameters/JobID"
+        - name: after
+          in: query
+          required: false
+          schema: { type: integer, format: int64, minimum: 0, default: 0 }
+      responses:
+        "200":
+          description: Server-sent events stream
+          content:
+            text/event-stream:
+              schema:
+                type: string
+                contentMediaType: application/json
+                contentSchema: { $ref: "#/components/schemas/Event" }
+        "401": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+  /v1/jobs/{job_id}/messages:
+    post:
+      operationId: sendJobMessage
+      summary: Inject a message into a running job
+      tags: [plugin]
+      description: Only for actions with capability inject.
+      parameters:
+        - $ref: "#/components/parameters/JobID"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/Message" }
+      responses:
+        "202": { description: Message accepted }
+        "401": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+  /api/v1/triggers:
+    post:
+      operationId: emitTrigger
+      summary: Emit a trigger event
+      tags: [core]
+      parameters:
+        - name: X-Plugin-Name
+          in: header
+          required: true
+          schema: { type: string, pattern: "^[a-z][a-z0-9-]*$" }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/TriggerEvent" }
+      responses:
+        "202":
+          description: Event accepted; processes started (possibly none)
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TriggerAccepted" }
+        "401": { $ref: "#/components/responses/Error" }
+        "413": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+components:
+  securitySchemes:
+    pluginToken:
+      type: http
+      scheme: bearer
+  parameters:
+    JobID:
+      name: job_id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+  responses:
+    Error:
+      description: Error
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/APIError" }
+  schemas:
+    Outcome:
+      type: string
+      pattern: "^[a-z][a-z0-9_]*$"
+    Mode:
+      type: string
+      enum: [sync, async]
+    Capability:
+      type: string
+      enum: [events, inject]
+    Manifest:
+      type: object
+      additionalProperties: false
+      required: [protocol, name, version, description, actions]
+      properties:
+        protocol: { type: string, const: "1" }
+        name: { type: string, pattern: "^[a-z][a-z0-9-]*$" }
+        version: { type: string }
+        description: { type: string }
+        actions:
+          type: array
+          minItems: 1
+          items: { $ref: "#/components/schemas/ActionSpec" }
+        triggers:
+          type: array
+          items: { $ref: "#/components/schemas/TriggerSpec" }
+    ActionSpec:
+      type: object
+      additionalProperties: false
+      required: [name, description, mode, input_schema, output_schema, outcomes, default_timeout_seconds]
+      properties:
+        name: { type: string, pattern: "^[a-z][a-z0-9_.]*$" }
+        description: { type: string }
+        mode: { $ref: "#/components/schemas/Mode" }
+        input_schema: { type: object, description: JSON Schema of JobRequest.input }
+        output_schema: { type: object, description: JSON Schema of Result.output }
+        outcomes:
+          type: array
+          minItems: 1
+          uniqueItems: true
+          items: { $ref: "#/components/schemas/Outcome" }
+        capabilities:
+          type: array
+          uniqueItems: true
+          items: { $ref: "#/components/schemas/Capability" }
+        default_timeout_seconds: { type: integer, minimum: 1 }
+    TriggerSpec:
+      type: object
+      additionalProperties: false
+      required: [name, description, payload_schema]
+      properties:
+        name: { type: string, pattern: "^[a-z][a-z0-9_.]*$" }
+        description: { type: string }
+        payload_schema: { type: object, description: JSON Schema of TriggerEvent.payload }
+    Callback:
+      type: object
+      additionalProperties: false
+      required: [result_url, progress_url]
+      properties:
+        result_url: { type: string, format: uri }
+        progress_url: { type: string, format: uri }
+    JobRequest:
+      type: object
+      additionalProperties: false
+      required: [job_id, process_id, input, callback, deadline, heartbeat_seconds]
+      properties:
+        job_id: { type: string, format: uuid }
+        process_id: { type: string, format: uuid }
+        input: { type: object }
+        callback: { $ref: "#/components/schemas/Callback" }
+        deadline: { type: string, format: date-time }
+        heartbeat_seconds: { type: integer, minimum: 1 }
+    Usage:
+      type: object
+      additionalProperties: false
+      properties:
+        input: { type: integer, minimum: 0 }
+        output: { type: integer, minimum: 0 }
+        cache_creation_input: { type: integer, minimum: 0 }
+        cache_read_input: { type: integer, minimum: 0 }
+    JobError:
+      type: object
+      additionalProperties: false
+      required: [kind, message]
+      properties:
+        kind: { type: string, enum: [upstream, internal] }
+        message: { type: string }
+    Result:
+      type: object
+      description: Exactly one of outcome or error is set.
+      additionalProperties: false
+      required: [job_id, usage]
+      properties:
+        job_id: { type: string, format: uuid }
+        outcome: { $ref: "#/components/schemas/Outcome" }
+        output: { type: object }
+        error: { $ref: "#/components/schemas/JobError" }
+        usage: { $ref: "#/components/schemas/Usage" }
+    JobState:
+      type: object
+      additionalProperties: false
+      required: [job_id, action, status, updated_at]
+      properties:
+        job_id: { type: string, format: uuid }
+        action: { type: string }
+        status: { type: string, enum: [running, succeeded, failed, cancelled] }
+        phase: { type: string }
+        result: { $ref: "#/components/schemas/Result" }
+        updated_at: { type: string, format: date-time }
+    Progress:
+      type: object
+      additionalProperties: false
+      required: [job_id, phase, at]
+      properties:
+        job_id: { type: string, format: uuid }
+        phase: { type: string }
+        message: { type: string }
+        usage: { $ref: "#/components/schemas/Usage" }
+        at: { type: string, format: date-time }
+    Event:
+      type: object
+      additionalProperties: false
+      required: [seq, at, kind]
+      properties:
+        seq: { type: integer, format: int64, minimum: 1 }
+        at: { type: string, format: date-time }
+        kind: { type: string }
+        data: {}
+    Message:
+      type: object
+      additionalProperties: false
+      required: [text]
+      properties:
+        text: { type: string, minLength: 1 }
+    Check:
+      type: object
+      additionalProperties: false
+      required: [status]
+      properties:
+        status: { $ref: "#/components/schemas/HealthStatus" }
+        message: { type: string }
+    HealthStatus:
+      type: string
+      enum: [ok, degraded, down]
+    Health:
+      type: object
+      additionalProperties: false
+      required: [status]
+      properties:
+        status: { $ref: "#/components/schemas/HealthStatus" }
+        checks:
+          type: object
+          additionalProperties: { $ref: "#/components/schemas/Check" }
+    Subject:
+      type: object
+      additionalProperties: false
+      required: [kind, key]
+      properties:
+        kind: { type: string }
+        key: { type: string }
+        url: { type: string, format: uri }
+        title: { type: string }
+    TriggerEvent:
+      type: object
+      additionalProperties: false
+      required: [plugin, trigger, subject, at]
+      properties:
+        plugin: { type: string, pattern: "^[a-z][a-z0-9-]*$" }
+        trigger: { type: string, pattern: "^[a-z][a-z0-9_.]*$" }
+        subject: { $ref: "#/components/schemas/Subject" }
+        payload: { type: object }
+        dedup_key: { type: string }
+        at: { type: string, format: date-time }
+    TriggerAccepted:
+      type: object
+      additionalProperties: false
+      required: [process_ids]
+      properties:
+        process_ids:
+          type: array
+          items: { type: string, format: uuid }
+    APIError:
+      type: object
+      additionalProperties: false
+      required: [code, message]
+      properties:
+        code:
+          type: string
+          enum: [invalid_input, unknown_action, job_not_found, job_conflict, job_not_active, unsupported, unauthorized, payload_too_large, internal, upstream_failure, protocol_mismatch]
+        message: { type: string }
