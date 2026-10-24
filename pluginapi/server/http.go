@@ -152,13 +152,14 @@ func (s *Server) handleStartJob(w http.ResponseWriter, r *http.Request) {
 	s.mu.Unlock()
 
 	if j.async() {
+		accepted := j.state()
 		go func() {
 			defer s.wg.Done()
 			s.execute(j)
 			s.deliver(j)
 		}()
 		go s.heartbeat(j)
-		s.writeState(w, r, http.StatusAccepted, j.state())
+		s.writeState(w, r, http.StatusAccepted, accepted)
 		return
 	}
 	defer s.wg.Done()

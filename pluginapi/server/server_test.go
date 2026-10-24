@@ -192,6 +192,19 @@ func TestStartJob(t *testing.T) {
 		assert.Empty(t, h.core.results)
 	})
 
+	t.Run("async start reports running even when the job ends at once", func(t *testing.T) {
+		instant := fakeAction{
+			spec: testSpec("a", pluginapi.ModeAsync),
+			run: func(context.Context, pluginapi.Job, pluginapi.Reporter) (pluginapi.Output, error) {
+				return pluginapi.Output{}, pluginapi.ErrUpstream
+			},
+		}
+		h := newHarness(t, Config{RetryBackoff: 10 * time.Millisecond}, instant)
+		status, state := h.rawStart(t, "a", h.request("j1", `{}`))
+		assert.Equal(t, http.StatusAccepted, status)
+		assert.Equal(t, pluginapi.JobRunning, state.Status)
+	})
+
 	t.Run("async accepted then result delivered", func(t *testing.T) {
 		h := newHarness(t, Config{}, okAction("a", pluginapi.ModeAsync))
 		status, state := h.rawStart(t, "a", h.request("j1", `{}`))
