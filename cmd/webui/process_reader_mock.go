@@ -4,8 +4,8 @@
 package main
 
 import (
-	"ai-orchestration/internal/process"
 	"context"
+	"github.com/Orfeo42/ai-orchestration/internal/process"
 	"sync"
 )
 

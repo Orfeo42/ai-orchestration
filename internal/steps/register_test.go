@@ -7,7 +7,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"ai-orchestration/internal/step"
+	"github.com/Orfeo42/ai-orchestration/internal/step"
 )
 
 func TestRegisterAll(t *testing.T) {

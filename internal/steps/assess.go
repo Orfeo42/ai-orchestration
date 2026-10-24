@@ -4,13 +4,13 @@ import (
 	"context"
 	"errors"
 
-	"ai-orchestration/internal/models"
-	"ai-orchestration/internal/pipeline"
-	"ai-orchestration/internal/pipeline/assess"
-	"ai-orchestration/internal/pipeline/checkout"
-	"ai-orchestration/internal/pipeline/state"
-	"ai-orchestration/internal/process"
-	"ai-orchestration/internal/step"
+	"github.com/Orfeo42/ai-orchestration/internal/models"
+	"github.com/Orfeo42/ai-orchestration/internal/pipeline"
+	"github.com/Orfeo42/ai-orchestration/internal/pipeline/assess"
+	"github.com/Orfeo42/ai-orchestration/internal/pipeline/checkout"
+	"github.com/Orfeo42/ai-orchestration/internal/pipeline/state"
+	"github.com/Orfeo42/ai-orchestration/internal/process"
+	"github.com/Orfeo42/ai-orchestration/internal/step"
 )
 
 const (

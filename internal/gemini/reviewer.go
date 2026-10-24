@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"log/slog"
 
-	"ai-orchestration/internal/events"
-	"ai-orchestration/internal/models"
+	"github.com/Orfeo42/ai-orchestration/internal/events"
+	"github.com/Orfeo42/ai-orchestration/internal/models"
 
 	"github.com/google/generative-ai-go/genai"
 )

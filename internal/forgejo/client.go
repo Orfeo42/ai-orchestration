@@ -11,7 +11,7 @@ import (
 	"strings"
 	"time"
 
-	"ai-orchestration/internal/models"
+	"github.com/Orfeo42/ai-orchestration/internal/models"
 )
 
 const (

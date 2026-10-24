@@ -1,7 +1,7 @@
 package runstore
 
 import (
-	"ai-orchestration/internal/events"
+	"github.com/Orfeo42/ai-orchestration/internal/events"
 )
 
 type Service string

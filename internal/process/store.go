@@ -4,7 +4,7 @@ import (
 	"context"
 	"database/sql"
 
-	"ai-orchestration/internal/events"
+	"github.com/Orfeo42/ai-orchestration/internal/events"
 )
 
 //go:generate moq -rm -out store_mock.go . Store:MockStore Tx:MockTx Querier:MockQuerier

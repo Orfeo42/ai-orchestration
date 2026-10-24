@@ -5,13 +5,13 @@ import (
 	"fmt"
 	"log/slog"
 
-	"ai-orchestration/internal/agent"
-	"ai-orchestration/internal/forgejo"
-	"ai-orchestration/internal/models"
-	"ai-orchestration/internal/pipeline"
-	"ai-orchestration/internal/pipeline/state"
-	"ai-orchestration/internal/runstore"
-	"ai-orchestration/internal/step"
+	"github.com/Orfeo42/ai-orchestration/internal/agent"
+	"github.com/Orfeo42/ai-orchestration/internal/forgejo"
+	"github.com/Orfeo42/ai-orchestration/internal/models"
+	"github.com/Orfeo42/ai-orchestration/internal/pipeline"
+	"github.com/Orfeo42/ai-orchestration/internal/pipeline/state"
+	"github.com/Orfeo42/ai-orchestration/internal/runstore"
+	"github.com/Orfeo42/ai-orchestration/internal/step"
 )
 
 type HydrateIssue struct{}

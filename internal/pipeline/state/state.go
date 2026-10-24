@@ -1,11 +1,11 @@
 package state
 
 import (
-	"ai-orchestration/internal/agent"
-	"ai-orchestration/internal/gitops"
-	"ai-orchestration/internal/models"
-	"ai-orchestration/internal/projects"
-	"ai-orchestration/internal/runstore"
+	"github.com/Orfeo42/ai-orchestration/internal/agent"
+	"github.com/Orfeo42/ai-orchestration/internal/gitops"
+	"github.com/Orfeo42/ai-orchestration/internal/models"
+	"github.com/Orfeo42/ai-orchestration/internal/projects"
+	"github.com/Orfeo42/ai-orchestration/internal/runstore"
 )
 
 type Assess struct {

@@ -10,8 +10,8 @@ import (
 
 	"github.com/go-playground/validator/v10"
 
-	"ai-orchestration/internal/process"
-	"ai-orchestration/internal/runstore"
+	"github.com/Orfeo42/ai-orchestration/internal/process"
+	"github.com/Orfeo42/ai-orchestration/internal/runstore"
 )
 
 type stepError string

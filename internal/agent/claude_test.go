@@ -8,7 +8,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"ai-orchestration/internal/models"
+	"github.com/Orfeo42/ai-orchestration/internal/models"
 )
 
 func TestBuildPrompt(t *testing.T) {

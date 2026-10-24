@@ -11,10 +11,10 @@ import (
 	"github.com/riverqueue/river/rivertype"
 	"github.com/stretchr/testify/require"
 
-	"ai-orchestration/internal/process"
-	"ai-orchestration/internal/runstore"
-	"ai-orchestration/internal/step"
-	"ai-orchestration/internal/workflow"
+	"github.com/Orfeo42/ai-orchestration/internal/process"
+	"github.com/Orfeo42/ai-orchestration/internal/runstore"
+	"github.com/Orfeo42/ai-orchestration/internal/step"
+	"github.com/Orfeo42/ai-orchestration/internal/workflow"
 )
 
 const nextJobID int64 = 101

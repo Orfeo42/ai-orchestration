@@ -2,7 +2,7 @@
 
 The orchestrator core manages workflows and processes only. Every capability (AI implementation, Forgejo, memory, notification, …) is a **plugin**: an independent HTTP service that implements this protocol. Implementing it is mandatory: the core refuses to register a plugin whose manifest does not validate, and every plugin must pass the conformance suite (`pluginapi/conformance`) in its own CI.
 
-The machine-readable contract is `openapi.yaml`; the Go types are in this module (`git.ionstream.ai/ionstream/ai-orchestrator/pluginapi`). Plugins written in Go use `server.Serve` (package `pluginapi/server`) and implement only `Action.Run`; the core and plugins call each other through package `pluginapi/client`; plugins in any other language implement the HTTP endpoints below.
+The machine-readable contract is `openapi.yaml`; the Go types are in this module (`github.com/Orfeo42/ai-orchestration/pluginapi`). Plugins written in Go use `server.Serve` (package `pluginapi/server`) and implement only `Action.Run`; the core and plugins call each other through package `pluginapi/client`; plugins in any other language implement the HTTP endpoints below.
 
 ## Concepts
 

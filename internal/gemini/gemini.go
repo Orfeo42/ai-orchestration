@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"ai-orchestration/internal/events"
+	"github.com/Orfeo42/ai-orchestration/internal/events"
 
 	"github.com/google/generative-ai-go/genai"
 	"google.golang.org/api/option"

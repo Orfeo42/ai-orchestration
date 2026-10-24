@@ -8,11 +8,11 @@ import (
 	"strconv"
 	"time"
 
-	"ai-orchestration/internal/agent"
-	"ai-orchestration/internal/memory"
-	"ai-orchestration/internal/projects"
-	"ai-orchestration/internal/runtime"
-	"ai-orchestration/internal/step"
+	"github.com/Orfeo42/ai-orchestration/internal/agent"
+	"github.com/Orfeo42/ai-orchestration/internal/memory"
+	"github.com/Orfeo42/ai-orchestration/internal/projects"
+	"github.com/Orfeo42/ai-orchestration/internal/runtime"
+	"github.com/Orfeo42/ai-orchestration/internal/step"
 )
 
 type configError string

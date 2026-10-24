@@ -5,8 +5,8 @@ import (
 	"log/slog"
 	"time"
 
-	"ai-orchestration/internal/projects"
-	"ai-orchestration/internal/runtime"
+	"github.com/Orfeo42/ai-orchestration/internal/projects"
+	"github.com/Orfeo42/ai-orchestration/internal/runtime"
 )
 
 type config struct {

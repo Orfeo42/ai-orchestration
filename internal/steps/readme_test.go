@@ -8,12 +8,12 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"ai-orchestration/internal/events"
-	"ai-orchestration/internal/forgejo"
-	"ai-orchestration/internal/gemini"
-	"ai-orchestration/internal/gitops"
-	"ai-orchestration/internal/models"
-	"ai-orchestration/internal/step"
+	"github.com/Orfeo42/ai-orchestration/internal/events"
+	"github.com/Orfeo42/ai-orchestration/internal/forgejo"
+	"github.com/Orfeo42/ai-orchestration/internal/gemini"
+	"github.com/Orfeo42/ai-orchestration/internal/gitops"
+	"github.com/Orfeo42/ai-orchestration/internal/models"
+	"github.com/Orfeo42/ai-orchestration/internal/step"
 )
 
 func readmeDeps(g gitops.Git, w *gemini.MockDocsWriter) Deps {

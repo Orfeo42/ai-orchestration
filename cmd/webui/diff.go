@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"strings"
 
-	"ai-orchestration/internal/forgejo"
+	"github.com/Orfeo42/ai-orchestration/internal/forgejo"
 )
 
 const errRunNoPR webError = "run has no associated PR"

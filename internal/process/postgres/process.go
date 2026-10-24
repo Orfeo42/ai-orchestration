@@ -7,7 +7,7 @@ import (
 
 	"github.com/jmoiron/sqlx"
 
-	"ai-orchestration/internal/process"
+	"github.com/Orfeo42/ai-orchestration/internal/process"
 )
 
 const (

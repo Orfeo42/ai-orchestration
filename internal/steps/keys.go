@@ -1,8 +1,8 @@
 package steps
 
 import (
-	"ai-orchestration/internal/models"
-	"ai-orchestration/internal/process"
+	"github.com/Orfeo42/ai-orchestration/internal/models"
+	"github.com/Orfeo42/ai-orchestration/internal/process"
 )
 
 const (

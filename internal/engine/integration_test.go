@@ -20,13 +20,13 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/testcontainers/testcontainers-go/modules/postgres"
 
-	"ai-orchestration/internal/db"
-	"ai-orchestration/internal/engine"
-	"ai-orchestration/internal/process"
-	"ai-orchestration/internal/runstore"
-	"ai-orchestration/internal/runtime"
-	"ai-orchestration/internal/step"
-	"ai-orchestration/internal/workflow"
+	"github.com/Orfeo42/ai-orchestration/internal/db"
+	"github.com/Orfeo42/ai-orchestration/internal/engine"
+	"github.com/Orfeo42/ai-orchestration/internal/process"
+	"github.com/Orfeo42/ai-orchestration/internal/runstore"
+	"github.com/Orfeo42/ai-orchestration/internal/runtime"
+	"github.com/Orfeo42/ai-orchestration/internal/step"
+	"github.com/Orfeo42/ai-orchestration/internal/workflow"
 )
 
 const (

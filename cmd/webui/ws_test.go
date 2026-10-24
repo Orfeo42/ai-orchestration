@@ -11,9 +11,9 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"ai-orchestration/internal/events"
-	"ai-orchestration/internal/process"
-	"ai-orchestration/internal/runstore"
+	"github.com/Orfeo42/ai-orchestration/internal/events"
+	"github.com/Orfeo42/ai-orchestration/internal/process"
+	"github.com/Orfeo42/ai-orchestration/internal/runstore"
 )
 
 func readFrame(t *testing.T, ctx context.Context, conn *websocket.Conn) wsFrame {

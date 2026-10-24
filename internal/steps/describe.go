@@ -4,12 +4,12 @@ import (
 	"context"
 	"fmt"
 
-	"ai-orchestration/internal/models"
-	"ai-orchestration/internal/pipeline/checkout"
-	"ai-orchestration/internal/pipeline/impl"
-	"ai-orchestration/internal/pipeline/state"
-	"ai-orchestration/internal/projects"
-	"ai-orchestration/internal/step"
+	"github.com/Orfeo42/ai-orchestration/internal/models"
+	"github.com/Orfeo42/ai-orchestration/internal/pipeline/checkout"
+	"github.com/Orfeo42/ai-orchestration/internal/pipeline/impl"
+	"github.com/Orfeo42/ai-orchestration/internal/pipeline/state"
+	"github.com/Orfeo42/ai-orchestration/internal/projects"
+	"github.com/Orfeo42/ai-orchestration/internal/step"
 )
 
 type describeStep struct {

@@ -10,10 +10,10 @@ import (
 	"github.com/google/uuid"
 	"github.com/riverqueue/river"
 
-	"ai-orchestration/internal/events"
-	"ai-orchestration/internal/process"
-	"ai-orchestration/internal/step"
-	"ai-orchestration/internal/workflow"
+	"github.com/Orfeo42/ai-orchestration/internal/events"
+	"github.com/Orfeo42/ai-orchestration/internal/process"
+	"github.com/Orfeo42/ai-orchestration/internal/step"
+	"github.com/Orfeo42/ai-orchestration/internal/workflow"
 )
 
 const waitingOutcome = "waiting"

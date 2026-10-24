@@ -3,7 +3,7 @@ package runstore
 import (
 	"context"
 
-	"ai-orchestration/internal/control"
+	"github.com/Orfeo42/ai-orchestration/internal/control"
 )
 
 func NewStepHandle(ctx context.Context, events EventStore, steps StepRunWriter, ctrl control.Channel, stepRunID string, service Service) *RunHandle {

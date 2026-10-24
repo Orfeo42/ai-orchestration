@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"log/slog"
 
-	"ai-orchestration/internal/forgejo"
-	"ai-orchestration/internal/process"
-	"ai-orchestration/internal/step"
+	"github.com/Orfeo42/ai-orchestration/internal/forgejo"
+	"github.com/Orfeo42/ai-orchestration/internal/process"
+	"github.com/Orfeo42/ai-orchestration/internal/step"
 )
 
 const OutcomeAnswered step.Outcome = "answered"

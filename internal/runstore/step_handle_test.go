@@ -11,8 +11,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"ai-orchestration/internal/control"
-	"ai-orchestration/internal/events"
+	"github.com/Orfeo42/ai-orchestration/internal/control"
+	"github.com/Orfeo42/ai-orchestration/internal/events"
 )
 
 func newTestControl(t *testing.T) *control.RedisChannel {

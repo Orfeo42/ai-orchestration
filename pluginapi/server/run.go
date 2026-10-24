@@ -7,7 +7,7 @@ import (
 	"log/slog"
 	"time"
 
-	"git.ionstream.ai/ionstream/ai-orchestrator/pluginapi"
+	"github.com/Orfeo42/ai-orchestration/pluginapi"
 )
 
 const (

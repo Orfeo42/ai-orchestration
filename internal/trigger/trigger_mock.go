@@ -4,9 +4,9 @@
 package trigger
 
 import (
-	"ai-orchestration/internal/engine"
-	"ai-orchestration/internal/process"
 	"context"
+	"github.com/Orfeo42/ai-orchestration/internal/engine"
+	"github.com/Orfeo42/ai-orchestration/internal/process"
 	"sync"
 )
 

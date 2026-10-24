@@ -6,7 +6,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"ai-orchestration/internal/models"
+	"github.com/Orfeo42/ai-orchestration/internal/models"
 )
 
 func TestGetIssues(t *testing.T) {

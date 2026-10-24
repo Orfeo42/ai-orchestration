@@ -3,7 +3,7 @@ package runstore
 import (
 	"context"
 
-	"ai-orchestration/internal/events"
+	"github.com/Orfeo42/ai-orchestration/internal/events"
 )
 
 type persister interface {

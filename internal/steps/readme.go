@@ -4,13 +4,13 @@ import (
 	"context"
 	"fmt"
 
-	"ai-orchestration/internal/pipeline"
-	"ai-orchestration/internal/pipeline/checkout"
-	"ai-orchestration/internal/pipeline/review"
-	"ai-orchestration/internal/pipeline/state"
-	"ai-orchestration/internal/process"
-	"ai-orchestration/internal/projects"
-	"ai-orchestration/internal/step"
+	"github.com/Orfeo42/ai-orchestration/internal/pipeline"
+	"github.com/Orfeo42/ai-orchestration/internal/pipeline/checkout"
+	"github.com/Orfeo42/ai-orchestration/internal/pipeline/review"
+	"github.com/Orfeo42/ai-orchestration/internal/pipeline/state"
+	"github.com/Orfeo42/ai-orchestration/internal/process"
+	"github.com/Orfeo42/ai-orchestration/internal/projects"
+	"github.com/Orfeo42/ai-orchestration/internal/step"
 )
 
 type readmeStep struct {

@@ -3,8 +3,8 @@ package gemini
 import (
 	"context"
 
-	"ai-orchestration/internal/events"
-	"ai-orchestration/internal/models"
+	"github.com/Orfeo42/ai-orchestration/internal/events"
+	"github.com/Orfeo42/ai-orchestration/internal/models"
 )
 
 //go:generate moq -rm -out mock.go . Reviewer:MockReviewer DocsWriter:MockDocsWriter PRDescWriter:MockPRDescWriter

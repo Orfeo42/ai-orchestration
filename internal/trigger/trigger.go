@@ -9,14 +9,14 @@ import (
 	"strconv"
 	"strings"
 
-	"ai-orchestration/internal/engine"
-	"ai-orchestration/internal/forgejo"
-	"ai-orchestration/internal/models"
-	"ai-orchestration/internal/process"
-	"ai-orchestration/internal/projects"
-	"ai-orchestration/internal/step"
-	"ai-orchestration/internal/steps"
-	"ai-orchestration/internal/workflow"
+	"github.com/Orfeo42/ai-orchestration/internal/engine"
+	"github.com/Orfeo42/ai-orchestration/internal/forgejo"
+	"github.com/Orfeo42/ai-orchestration/internal/models"
+	"github.com/Orfeo42/ai-orchestration/internal/process"
+	"github.com/Orfeo42/ai-orchestration/internal/projects"
+	"github.com/Orfeo42/ai-orchestration/internal/step"
+	"github.com/Orfeo42/ai-orchestration/internal/steps"
+	"github.com/Orfeo42/ai-orchestration/internal/workflow"
 )
 
 //go:generate moq -rm -out trigger_mock.go . Engine:MockEngine Store:MockStore

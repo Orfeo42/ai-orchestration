@@ -8,9 +8,9 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"ai-orchestration/internal/process"
-	"ai-orchestration/internal/step"
-	"ai-orchestration/internal/workflow"
+	"github.com/Orfeo42/ai-orchestration/internal/process"
+	"github.com/Orfeo42/ai-orchestration/internal/step"
+	"github.com/Orfeo42/ai-orchestration/internal/workflow"
 )
 
 func waitingProcess(kind process.WaitKind, stepID, resume string) process.Process {

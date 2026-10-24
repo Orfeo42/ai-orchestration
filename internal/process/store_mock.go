@@ -4,9 +4,9 @@
 package process
 
 import (
-	"ai-orchestration/internal/events"
 	"context"
 	"database/sql"
+	"github.com/Orfeo42/ai-orchestration/internal/events"
 	"sync"
 )
 

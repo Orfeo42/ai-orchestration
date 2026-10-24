@@ -8,9 +8,9 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"ai-orchestration/internal/analytics"
-	"ai-orchestration/internal/events"
-	"ai-orchestration/internal/process"
+	"github.com/Orfeo42/ai-orchestration/internal/analytics"
+	"github.com/Orfeo42/ai-orchestration/internal/events"
+	"github.com/Orfeo42/ai-orchestration/internal/process"
 )
 
 var (

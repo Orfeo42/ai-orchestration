@@ -6,9 +6,9 @@ import (
 	"sync"
 	"time"
 
-	"ai-orchestration/internal/control"
-	"ai-orchestration/internal/events"
-	"ai-orchestration/internal/models"
+	"github.com/Orfeo42/ai-orchestration/internal/control"
+	"github.com/Orfeo42/ai-orchestration/internal/events"
+	"github.com/Orfeo42/ai-orchestration/internal/models"
 )
 
 type RunHandle struct {

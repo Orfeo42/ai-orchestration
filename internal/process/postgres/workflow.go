@@ -6,7 +6,7 @@ import (
 
 	"github.com/jmoiron/sqlx"
 
-	"ai-orchestration/internal/process"
+	"github.com/Orfeo42/ai-orchestration/internal/process"
 )
 
 const workflowVersionColumns = `id, name, hash, definition, source_yaml, created_at`

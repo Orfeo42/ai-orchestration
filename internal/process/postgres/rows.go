@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"time"
 
-	"ai-orchestration/internal/events"
-	"ai-orchestration/internal/process"
+	"github.com/Orfeo42/ai-orchestration/internal/events"
+	"github.com/Orfeo42/ai-orchestration/internal/process"
 )
 
 const emptyJSON = "{}"

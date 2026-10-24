@@ -10,7 +10,7 @@ import (
 
 	"github.com/redis/go-redis/v9"
 
-	"ai-orchestration/internal/events"
+	"github.com/Orfeo42/ai-orchestration/internal/events"
 )
 
 const (

@@ -4,7 +4,7 @@ import (
 	"context"
 	"time"
 
-	"ai-orchestration/internal/events"
+	"github.com/Orfeo42/ai-orchestration/internal/events"
 )
 
 //go:generate moq -rm -out store_mock.go . EventStore:MockEventStore StepRunWriter:MockStepRunWriter

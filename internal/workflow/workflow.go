@@ -14,7 +14,7 @@ import (
 
 	"github.com/goccy/go-yaml"
 
-	"ai-orchestration/internal/step"
+	"github.com/Orfeo42/ai-orchestration/internal/step"
 )
 
 type workflowError string

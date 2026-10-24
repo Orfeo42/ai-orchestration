@@ -12,16 +12,16 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"ai-orchestration/internal/analytics"
-	"ai-orchestration/internal/control"
-	"ai-orchestration/internal/events"
-	"ai-orchestration/internal/forgejo"
-	"ai-orchestration/internal/models"
-	"ai-orchestration/internal/process"
-	"ai-orchestration/internal/step"
-	"ai-orchestration/internal/steps"
-	"ai-orchestration/internal/trigger"
-	"ai-orchestration/internal/workflow"
+	"github.com/Orfeo42/ai-orchestration/internal/analytics"
+	"github.com/Orfeo42/ai-orchestration/internal/control"
+	"github.com/Orfeo42/ai-orchestration/internal/events"
+	"github.com/Orfeo42/ai-orchestration/internal/forgejo"
+	"github.com/Orfeo42/ai-orchestration/internal/models"
+	"github.com/Orfeo42/ai-orchestration/internal/process"
+	"github.com/Orfeo42/ai-orchestration/internal/step"
+	"github.com/Orfeo42/ai-orchestration/internal/steps"
+	"github.com/Orfeo42/ai-orchestration/internal/trigger"
+	"github.com/Orfeo42/ai-orchestration/internal/workflow"
 )
 
 type processTestServer struct {

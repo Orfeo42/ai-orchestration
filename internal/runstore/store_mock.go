@@ -4,8 +4,8 @@
 package runstore
 
 import (
-	"ai-orchestration/internal/events"
 	"context"
+	"github.com/Orfeo42/ai-orchestration/internal/events"
 	"sync"
 	"time"
 )

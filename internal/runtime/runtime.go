@@ -10,8 +10,8 @@ import (
 	"os/signal"
 	"syscall"
 
-	"ai-orchestration/internal/control"
-	"ai-orchestration/internal/runstore"
+	"github.com/Orfeo42/ai-orchestration/internal/control"
+	"github.com/Orfeo42/ai-orchestration/internal/runstore"
 )
 
 func InitLogger(level slog.Level) {

@@ -8,10 +8,10 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"ai-orchestration/internal/agent"
-	"ai-orchestration/internal/events"
-	"ai-orchestration/internal/models"
-	"ai-orchestration/internal/step"
+	"github.com/Orfeo42/ai-orchestration/internal/agent"
+	"github.com/Orfeo42/ai-orchestration/internal/events"
+	"github.com/Orfeo42/ai-orchestration/internal/models"
+	"github.com/Orfeo42/ai-orchestration/internal/step"
 )
 
 func TestImplementAttempt(t *testing.T) {

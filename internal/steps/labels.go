@@ -4,7 +4,7 @@ import (
 	"context"
 	"log/slog"
 
-	"ai-orchestration/internal/step"
+	"github.com/Orfeo42/ai-orchestration/internal/step"
 )
 
 type labelsParams struct {

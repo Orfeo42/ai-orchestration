@@ -1,4 +1,4 @@
-module git.ionstream.ai/ionstream/ai-orchestrator/pluginapi
+module github.com/Orfeo42/ai-orchestration/pluginapi
 
 go 1.27
 

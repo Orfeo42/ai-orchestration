@@ -17,7 +17,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/testcontainers/testcontainers-go/modules/postgres"
 
-	"ai-orchestration/internal/db"
+	"github.com/Orfeo42/ai-orchestration/internal/db"
 )
 
 const templateName = "tpl"

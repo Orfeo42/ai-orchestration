@@ -5,9 +5,9 @@ import (
 	"errors"
 	"testing"
 
-	"ai-orchestration/internal/gitops"
-	"ai-orchestration/internal/pipeline/state"
-	"ai-orchestration/internal/projects"
+	"github.com/Orfeo42/ai-orchestration/internal/gitops"
+	"github.com/Orfeo42/ai-orchestration/internal/pipeline/state"
+	"github.com/Orfeo42/ai-orchestration/internal/projects"
 )
 
 func TestImplCheckout(t *testing.T) {

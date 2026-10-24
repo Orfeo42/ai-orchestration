@@ -6,12 +6,12 @@ import (
 
 	"github.com/riverqueue/river"
 
-	"ai-orchestration/internal/engine"
-	"ai-orchestration/internal/forgejo"
-	"ai-orchestration/internal/runtime"
-	"ai-orchestration/internal/step"
-	"ai-orchestration/internal/steps"
-	"ai-orchestration/internal/trigger"
+	"github.com/Orfeo42/ai-orchestration/internal/engine"
+	"github.com/Orfeo42/ai-orchestration/internal/forgejo"
+	"github.com/Orfeo42/ai-orchestration/internal/runtime"
+	"github.com/Orfeo42/ai-orchestration/internal/step"
+	"github.com/Orfeo42/ai-orchestration/internal/steps"
+	"github.com/Orfeo42/ai-orchestration/internal/trigger"
 )
 
 func main() {

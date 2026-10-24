@@ -6,12 +6,12 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"ai-orchestration/internal/gitops"
-	"ai-orchestration/internal/models"
-	"ai-orchestration/internal/process"
-	"ai-orchestration/internal/projects"
-	"ai-orchestration/internal/runstore"
-	"ai-orchestration/internal/step"
+	"github.com/Orfeo42/ai-orchestration/internal/gitops"
+	"github.com/Orfeo42/ai-orchestration/internal/models"
+	"github.com/Orfeo42/ai-orchestration/internal/process"
+	"github.com/Orfeo42/ai-orchestration/internal/projects"
+	"github.com/Orfeo42/ai-orchestration/internal/runstore"
+	"github.com/Orfeo42/ai-orchestration/internal/step"
 )
 
 var testIssue = models.ForgejoIssue{

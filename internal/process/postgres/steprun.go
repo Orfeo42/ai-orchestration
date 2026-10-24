@@ -7,8 +7,8 @@ import (
 
 	"github.com/jmoiron/sqlx"
 
-	"ai-orchestration/internal/events"
-	"ai-orchestration/internal/process"
+	"github.com/Orfeo42/ai-orchestration/internal/events"
+	"github.com/Orfeo42/ai-orchestration/internal/process"
 )
 
 const stepRunColumns = `id, process_id, step_id, uses, attempt, iteration, river_job_id, worker_id, status, outcome, phase,

@@ -4,7 +4,7 @@ import (
 	"slices"
 	"strings"
 
-	"ai-orchestration/internal/step"
+	"github.com/Orfeo42/ai-orchestration/internal/step"
 )
 
 type queueError string

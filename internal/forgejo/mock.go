@@ -4,7 +4,7 @@
 package forgejo
 
 import (
-	"ai-orchestration/internal/models"
+	"github.com/Orfeo42/ai-orchestration/internal/models"
 	"sync"
 )
 

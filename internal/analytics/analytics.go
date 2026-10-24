@@ -4,8 +4,8 @@ import (
 	"context"
 	"time"
 
-	"ai-orchestration/internal/events"
-	"ai-orchestration/internal/process"
+	"github.com/Orfeo42/ai-orchestration/internal/events"
+	"github.com/Orfeo42/ai-orchestration/internal/process"
 )
 
 //go:generate moq -rm -out analytics_mock.go . Querier:MockQuerier

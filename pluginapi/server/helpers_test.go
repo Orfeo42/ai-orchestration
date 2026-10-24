@@ -14,8 +14,8 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"git.ionstream.ai/ionstream/ai-orchestrator/pluginapi"
-	"git.ionstream.ai/ionstream/ai-orchestrator/pluginapi/client"
+	"github.com/Orfeo42/ai-orchestration/pluginapi"
+	"github.com/Orfeo42/ai-orchestration/pluginapi/client"
 )
 
 const (

@@ -10,8 +10,8 @@ import (
 
 	"github.com/coder/websocket"
 
-	"ai-orchestration/internal/events"
-	"ai-orchestration/internal/process"
+	"github.com/Orfeo42/ai-orchestration/internal/events"
+	"github.com/Orfeo42/ai-orchestration/internal/process"
 )
 
 type wsFrame struct {

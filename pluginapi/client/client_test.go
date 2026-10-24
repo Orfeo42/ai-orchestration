@@ -14,7 +14,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"git.ionstream.ai/ionstream/ai-orchestrator/pluginapi"
+	"github.com/Orfeo42/ai-orchestration/pluginapi"
 )
 
 func writeString(t *testing.T, w http.ResponseWriter, s string) {

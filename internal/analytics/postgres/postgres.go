@@ -8,9 +8,9 @@ import (
 
 	"github.com/jmoiron/sqlx"
 
-	"ai-orchestration/internal/analytics"
-	"ai-orchestration/internal/events"
-	"ai-orchestration/internal/process"
+	"github.com/Orfeo42/ai-orchestration/internal/analytics"
+	"github.com/Orfeo42/ai-orchestration/internal/events"
+	"github.com/Orfeo42/ai-orchestration/internal/process"
 )
 
 const (

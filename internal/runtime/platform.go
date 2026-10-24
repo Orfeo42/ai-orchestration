@@ -8,10 +8,10 @@ import (
 
 	"github.com/riverqueue/river"
 
-	"ai-orchestration/internal/db"
-	"ai-orchestration/internal/engine"
-	"ai-orchestration/internal/process/postgres"
-	"ai-orchestration/internal/step"
+	"github.com/Orfeo42/ai-orchestration/internal/db"
+	"github.com/Orfeo42/ai-orchestration/internal/engine"
+	"github.com/Orfeo42/ai-orchestration/internal/process/postgres"
+	"github.com/Orfeo42/ai-orchestration/internal/step"
 )
 
 type Platform struct {

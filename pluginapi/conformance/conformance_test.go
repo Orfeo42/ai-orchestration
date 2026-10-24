@@ -10,9 +10,9 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"git.ionstream.ai/ionstream/ai-orchestrator/pluginapi"
-	"git.ionstream.ai/ionstream/ai-orchestrator/pluginapi/conformance"
-	"git.ionstream.ai/ionstream/ai-orchestrator/pluginapi/server"
+	"github.com/Orfeo42/ai-orchestration/pluginapi"
+	"github.com/Orfeo42/ai-orchestration/pluginapi/conformance"
+	"github.com/Orfeo42/ai-orchestration/pluginapi/server"
 )
 
 type sampleInput struct {

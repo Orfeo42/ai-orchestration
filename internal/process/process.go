@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"time"
 
-	"ai-orchestration/internal/events"
+	"github.com/Orfeo42/ai-orchestration/internal/events"
 )
 
 type processError string

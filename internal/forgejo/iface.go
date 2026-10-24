@@ -1,6 +1,6 @@
 package forgejo
 
-import "ai-orchestration/internal/models"
+import "github.com/Orfeo42/ai-orchestration/internal/models"
 
 //go:generate moq -rm -out mock.go . Forgejo:MockForgejo
 

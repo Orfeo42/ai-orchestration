@@ -3,8 +3,8 @@ package agent
 import (
 	"context"
 
-	"ai-orchestration/internal/events"
-	"ai-orchestration/internal/models"
+	"github.com/Orfeo42/ai-orchestration/internal/events"
+	"github.com/Orfeo42/ai-orchestration/internal/models"
 )
 
 //go:generate moq -rm -out mock.go . Agent:MockAgent

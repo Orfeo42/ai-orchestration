@@ -12,19 +12,19 @@ import (
 
 	"github.com/riverqueue/river"
 
-	"ai-orchestration/internal/agent"
-	"ai-orchestration/internal/engine"
-	"ai-orchestration/internal/forgejo"
-	"ai-orchestration/internal/gemini"
-	"ai-orchestration/internal/gitops"
-	"ai-orchestration/internal/memory"
-	"ai-orchestration/internal/pipeline/impl"
-	"ai-orchestration/internal/runstore"
-	"ai-orchestration/internal/runtime"
-	"ai-orchestration/internal/step"
-	"ai-orchestration/internal/steps"
-	"ai-orchestration/internal/testrunner"
-	"ai-orchestration/internal/workerreg"
+	"github.com/Orfeo42/ai-orchestration/internal/agent"
+	"github.com/Orfeo42/ai-orchestration/internal/engine"
+	"github.com/Orfeo42/ai-orchestration/internal/forgejo"
+	"github.com/Orfeo42/ai-orchestration/internal/gemini"
+	"github.com/Orfeo42/ai-orchestration/internal/gitops"
+	"github.com/Orfeo42/ai-orchestration/internal/memory"
+	"github.com/Orfeo42/ai-orchestration/internal/pipeline/impl"
+	"github.com/Orfeo42/ai-orchestration/internal/runstore"
+	"github.com/Orfeo42/ai-orchestration/internal/runtime"
+	"github.com/Orfeo42/ai-orchestration/internal/step"
+	"github.com/Orfeo42/ai-orchestration/internal/steps"
+	"github.com/Orfeo42/ai-orchestration/internal/testrunner"
+	"github.com/Orfeo42/ai-orchestration/internal/workerreg"
 )
 
 const (

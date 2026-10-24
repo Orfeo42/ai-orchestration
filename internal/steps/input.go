@@ -3,11 +3,11 @@ package steps
 import (
 	"fmt"
 
-	"ai-orchestration/internal/forgejo"
-	"ai-orchestration/internal/models"
-	"ai-orchestration/internal/process"
-	"ai-orchestration/internal/projects"
-	"ai-orchestration/internal/step"
+	"github.com/Orfeo42/ai-orchestration/internal/forgejo"
+	"github.com/Orfeo42/ai-orchestration/internal/models"
+	"github.com/Orfeo42/ai-orchestration/internal/process"
+	"github.com/Orfeo42/ai-orchestration/internal/projects"
+	"github.com/Orfeo42/ai-orchestration/internal/step"
 )
 
 func loadIssue(sc step.Context) (models.ForgejoIssue, error) {

@@ -3,13 +3,13 @@ package steps
 import (
 	"errors"
 
-	"ai-orchestration/internal/agent"
-	"ai-orchestration/internal/forgejo"
-	"ai-orchestration/internal/gemini"
-	"ai-orchestration/internal/gitops"
-	"ai-orchestration/internal/pipeline/impl"
-	"ai-orchestration/internal/projects"
-	"ai-orchestration/internal/step"
+	"github.com/Orfeo42/ai-orchestration/internal/agent"
+	"github.com/Orfeo42/ai-orchestration/internal/forgejo"
+	"github.com/Orfeo42/ai-orchestration/internal/gemini"
+	"github.com/Orfeo42/ai-orchestration/internal/gitops"
+	"github.com/Orfeo42/ai-orchestration/internal/pipeline/impl"
+	"github.com/Orfeo42/ai-orchestration/internal/projects"
+	"github.com/Orfeo42/ai-orchestration/internal/step"
 )
 
 type stepsError string

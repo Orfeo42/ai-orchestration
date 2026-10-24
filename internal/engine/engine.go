@@ -12,10 +12,10 @@ import (
 	"github.com/google/uuid"
 	"github.com/riverqueue/river"
 
-	"ai-orchestration/internal/process"
-	"ai-orchestration/internal/runstore"
-	"ai-orchestration/internal/step"
-	"ai-orchestration/internal/workflow"
+	"github.com/Orfeo42/ai-orchestration/internal/process"
+	"github.com/Orfeo42/ai-orchestration/internal/runstore"
+	"github.com/Orfeo42/ai-orchestration/internal/step"
+	"github.com/Orfeo42/ai-orchestration/internal/workflow"
 )
 
 //go:generate moq -rm -out engine_mock.go . Queue:MockQueue Completer:MockCompleter Control:MockControl

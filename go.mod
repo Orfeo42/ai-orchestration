@@ -1,4 +1,4 @@
-module ai-orchestration
+module github.com/Orfeo42/ai-orchestration
 
 go 1.27
 

@@ -3,8 +3,8 @@ package main
 import (
 	"log/slog"
 
-	"ai-orchestration/internal/db"
-	"ai-orchestration/internal/runtime"
+	"github.com/Orfeo42/ai-orchestration/internal/db"
+	"github.com/Orfeo42/ai-orchestration/internal/runtime"
 )
 
 func main() {
