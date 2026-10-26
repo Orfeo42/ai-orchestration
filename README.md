@@ -198,3 +198,7 @@ just go-test               # unit tests, no docker
 just go-test-integration   # engine + store integration tests (Docker required)
 just web-test
 ```
+
+## License
+
+Apache License 2.0, see [LICENSE](LICENSE).
