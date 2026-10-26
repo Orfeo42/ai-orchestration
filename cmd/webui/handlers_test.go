@@ -20,7 +20,7 @@ func newTestServer(t *testing.T) testServer {
 
 func newTestServerWith(t *testing.T, proc *processHandler) testServer {
 	t.Helper()
-	srv, err := newServer("127.0.0.1:0", proc)
+	srv, err := newServer("127.0.0.1:0", proc, &pluginHandler{})
 	require.NoError(t, err)
 	ts := httptest.NewServer(srv.srv.Handler)
 	t.Cleanup(ts.Close)

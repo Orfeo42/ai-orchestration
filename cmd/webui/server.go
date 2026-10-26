@@ -1,14 +1,13 @@
 package main
 
 import (
-	"bufio"
 	"context"
-	"errors"
 	"fmt"
 	"log/slog"
-	"net"
 	"net/http"
 	"time"
+
+	"github.com/Orfeo42/ai-orchestration/pluginapi"
 )
 
 type server struct {
@@ -16,10 +15,11 @@ type server struct {
 	srv  *http.Server
 }
 
-func newServer(addr string, proc *processHandler) (*server, error) {
+func newServer(addr string, proc *processHandler, plug *pluginHandler) (*server, error) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", healthz)
 	registerProcessRoutes(mux, proc)
+	registerPluginRoutes(mux, plug)
 
 	static, err := staticHandler()
 	if err != nil {
@@ -29,7 +29,7 @@ func newServer(addr string, proc *processHandler) (*server, error) {
 
 	srv := &http.Server{
 		Addr:              addr,
-		Handler:           logRequest(mux),
+		Handler:           mux,
 		ReadHeaderTimeout: 10 * time.Second,
 	}
 	return &server{addr: addr, srv: srv}, nil
@@ -61,44 +61,6 @@ func (s *server) run(ctx context.Context) error {
 	}
 }
 
-func logRequest(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		start := time.Now()
-		rec := &statusRecorder{ResponseWriter: w, status: http.StatusOK}
-		next.ServeHTTP(rec, r)
-		slog.DebugContext(r.Context(), "http",
-			"method", r.Method,
-			"path", r.URL.Path,
-			"status", rec.status,
-			"duration_ms", time.Since(start).Milliseconds(),
-		)
-	})
-}
-
-type statusRecorder struct {
-	http.ResponseWriter
-	status int
-}
-
-func (s *statusRecorder) WriteHeader(code int) {
-	s.status = code
-	s.ResponseWriter.WriteHeader(code)
-}
-
-func (s *statusRecorder) Hijack() (net.Conn, *bufio.ReadWriter, error) {
-	hj, ok := s.ResponseWriter.(http.Hijacker)
-	if !ok {
-		return nil, nil, errors.New("upstream ResponseWriter does not implement Hijacker")
-	}
-	return hj.Hijack()
-}
-
-func (s *statusRecorder) Flush() {
-	if f, ok := s.ResponseWriter.(http.Flusher); ok {
-		f.Flush()
-	}
-}
-
 func registerProcessRoutes(mux *http.ServeMux, h *processHandler) {
 	mux.HandleFunc("GET /api/processes", h.listProcesses)
 	mux.HandleFunc("GET /api/processes/{id}", h.getProcess)
@@ -118,4 +80,17 @@ func registerProcessRoutes(mux *http.ServeMux, h *processHandler) {
 	mux.HandleFunc("GET /api/analytics/steps", h.analyticsSteps)
 	mux.HandleFunc("GET /api/analytics/tokens", h.analyticsTokens)
 	mux.HandleFunc("GET /api/analytics/failures", h.analyticsFailures)
+}
+
+func registerPluginRoutes(mux *http.ServeMux, h *pluginHandler) {
+	mux.HandleFunc("GET /api/catalog", h.getCatalog)
+	mux.HandleFunc("GET /api/plugins", h.listPlugins)
+	mux.HandleFunc("POST /api/plugins", h.registerPlugin)
+	mux.HandleFunc("POST /api/plugins/{name}/refresh", h.refreshPlugin)
+	mux.HandleFunc("DELETE /api/plugins/{name}", h.removePlugin)
+	mux.HandleFunc("POST /api/workflows", h.saveWorkflow)
+	mux.HandleFunc("DELETE /api/workflows/{name}", h.deleteWorkflow)
+	mux.HandleFunc("POST /api/v1/jobs/{job_id}/result", h.jobResult)
+	mux.HandleFunc("POST /api/v1/jobs/{job_id}/progress", h.jobProgress)
+	mux.HandleFunc("POST "+pluginapi.CorePathTrigger, h.postTrigger)
 }

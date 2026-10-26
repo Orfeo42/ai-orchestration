@@ -4,6 +4,11 @@ x-forgejo-env: &forgejo-env
   FORGEJO_URL: ${FORGEJO_URL}
   FORGEJO_TOKEN: ${FORGEJO_TOKEN}
 
+x-plugin-env: &plugin-env
+  CALLBACK_SECRET: ${CALLBACK_SECRET:?}
+  CORE_PUBLIC_URL: ${CORE_PUBLIC_URL:-http://webui:8080}
+  PLUGIN_ECHO_TOKEN: ${PLUGIN_ECHO_TOKEN:-}
+
 x-projects-volume: &projects-config
   ${PROJECTS_CONFIG_PATH:-./projects.json}:/config/projects.json:ro
 
@@ -70,7 +75,7 @@ services:
       migrate:
         condition: service_completed_successfully
     environment:
-      <<: *forgejo-env
+      <<: [*forgejo-env, *plugin-env]
       DATABASE_URL: *database-url
       POLL_INTERVAL: ${POLL_INTERVAL:-60s}
       WORKFLOWS_DIR: /workflows
@@ -84,7 +89,7 @@ services:
     <<: *worker
     command: ["--queues=claude"]
     environment:
-      <<: *forgejo-env
+      <<: [*forgejo-env, *plugin-env]
       DATABASE_URL: *database-url
       REDIS_URL: ${REDIS_URL:-redis://redis:6379}
       CLAUDE_CODE_OAUTH_TOKEN: ${CLAUDE_CODE_OAUTH_TOKEN:?}
@@ -103,7 +108,7 @@ services:
     <<: *worker
     command: ["--queues=default"]
     environment:
-      <<: *forgejo-env
+      <<: [*forgejo-env, *plugin-env]
       DATABASE_URL: *database-url
       REDIS_URL: ${REDIS_URL:-redis://redis:6379}
       GIT_USER_NAME: ${GIT_USER_NAME:-AI Orchestrator}
@@ -125,7 +130,7 @@ services:
       migrate:
         condition: service_completed_successfully
     environment:
-      <<: *forgejo-env
+      <<: [*forgejo-env, *plugin-env]
       DATABASE_URL: *database-url
       LISTEN_ADDR: 0.0.0.0:8080
       REDIS_URL: ${REDIS_URL:-redis://redis:6379}
@@ -135,6 +140,16 @@ services:
       - *projects-config
     ports:
       - "127.0.0.1:8080:8080"
+
+  echo:
+    profiles: ["echo"]
+    build:
+      context: .
+      dockerfile: plugins/echo/Dockerfile
+    restart: unless-stopped
+    environment:
+      ECHO_TOKEN: ${PLUGIN_ECHO_TOKEN:?}
+      LISTEN_ADDR: 0.0.0.0:8090
 
 volumes:
   postgres_data:

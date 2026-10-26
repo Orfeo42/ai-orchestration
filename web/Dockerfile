@@ -8,6 +8,7 @@ RUN npm run build
 FROM golang:1.27.3-alpine AS builder
 WORKDIR /build
 COPY go.mod go.sum ./
+COPY pluginapi/go.mod pluginapi/go.sum ./pluginapi/
 RUN go mod download
 COPY . .
 COPY --from=frontend /cmd/webui/dist ./cmd/webui/dist

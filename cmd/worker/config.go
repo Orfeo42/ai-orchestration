@@ -44,6 +44,8 @@ type config struct {
 	defaultMaxWorkers int
 	stepTimeout       time.Duration
 	rescueAfter       time.Duration
+	plugins           runtime.PluginConfig
+	pluginRefresh     time.Duration
 }
 
 func loadConfig(queues []string) (config, error) {
@@ -54,6 +56,10 @@ func loadConfig(queues []string) (config, error) {
 	cfg.forgejoURL = runtime.MustEnv("FORGEJO_URL")
 	cfg.forgejoToken = runtime.MustEnv("FORGEJO_TOKEN")
 	cfg.databaseURL = runtime.MustEnv("DATABASE_URL")
+	cfg.plugins = runtime.PluginConfig{
+		PublicURL:      runtime.MustEnv("CORE_PUBLIC_URL"),
+		CallbackSecret: runtime.MustEnv("CALLBACK_SECRET"),
+	}
 	cfg.redisURL = runtime.EnvOr("REDIS_URL", "redis://redis:6379")
 	cfg.projectsRoot = runtime.EnvOr("PROJECTS_ROOT", projects.DefaultRoot)
 	cfg.gitUserName = runtime.EnvOr("GIT_USER_NAME", "AI Orchestrator")
@@ -103,6 +109,12 @@ func loadTiming(cfg *config) error {
 	}
 	cfg.stepTimeout = stepTimeout
 	cfg.rescueAfter = rescueAfter
+
+	refresh, err := time.ParseDuration(runtime.EnvOr("PLUGIN_REFRESH_INTERVAL", "30s"))
+	if err != nil {
+		return fmt.Errorf("PLUGIN_REFRESH_INTERVAL: %w", err)
+	}
+	cfg.pluginRefresh = refresh
 	return nil
 }
 

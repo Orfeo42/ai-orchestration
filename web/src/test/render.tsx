@@ -23,6 +23,8 @@ export function renderPage(
           <Routes>
             <Route path={path} element={ui} />
             <Route path="/processes/:id" element={<p>process page</p>} />
+            <Route path="/workflows" element={<p>workflow list page</p>} />
+            <Route path="/workflows/:name" element={<p>workflow page</p>} />
           </Routes>
         </MemoryRouter>
       </ThemeProvider>

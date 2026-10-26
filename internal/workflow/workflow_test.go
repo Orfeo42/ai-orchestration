@@ -87,7 +87,7 @@ func TestParse(t *testing.T) {
 }
 
 func TestValidate(t *testing.T) {
-	reg := newTestRegistry(t)
+	reg := newTestCatalog(t)
 
 	t.Run("example is valid", func(t *testing.T) {
 		require.NoError(t, parseExample(t).Validate(reg))
@@ -117,12 +117,10 @@ func TestValidate(t *testing.T) {
 		assert.Contains(t, err.Error(), "ghost")
 	})
 
-	t.Run("missing forgejo trigger", func(t *testing.T) {
+	t.Run("zero trigger is valid", func(t *testing.T) {
 		def := parseExample(t)
-		def.Trigger.Forgejo = nil
-		err := def.Validate(reg)
-		require.ErrorIs(t, err, ErrInvalid)
-		assert.Contains(t, err.Error(), "trigger.forgejo")
+		def.Trigger = Trigger{}
+		require.NoError(t, def.Validate(reg))
 	})
 
 	t.Run("no repos", func(t *testing.T) {
@@ -163,6 +161,61 @@ func TestValidate(t *testing.T) {
 		err := def.Validate(reg)
 		require.ErrorIs(t, err, ErrInvalid)
 		assert.Contains(t, err.Error(), "label")
+	})
+
+	t.Run("plugin trigger is valid", func(t *testing.T) {
+		def := parseExample(t)
+		def.Trigger = Trigger{Plugin: "git", Event: "push", Match: map[string]json.RawMessage{"branch": json.RawMessage(`"main"`)}}
+		require.NoError(t, def.Validate(reg))
+	})
+
+	t.Run("forgejo with plugin", func(t *testing.T) {
+		def := parseExample(t)
+		def.Trigger.Plugin = "git"
+		def.Trigger.Event = "push"
+		err := def.Validate(reg)
+		require.ErrorIs(t, err, ErrInvalid)
+		assert.Contains(t, err.Error(), "mutually exclusive")
+	})
+
+	t.Run("event without plugin", func(t *testing.T) {
+		def := parseExample(t)
+		def.Trigger = Trigger{Event: "push"}
+		err := def.Validate(reg)
+		require.ErrorIs(t, err, ErrInvalid)
+		assert.Contains(t, err.Error(), "trigger.event requires trigger.plugin")
+	})
+
+	t.Run("match without plugin", func(t *testing.T) {
+		def := parseExample(t)
+		def.Trigger = Trigger{Match: map[string]json.RawMessage{"a": json.RawMessage(`1`)}}
+		err := def.Validate(reg)
+		require.ErrorIs(t, err, ErrInvalid)
+		assert.Contains(t, err.Error(), "trigger.match requires trigger.plugin")
+	})
+
+	t.Run("plugin without event", func(t *testing.T) {
+		def := parseExample(t)
+		def.Trigger = Trigger{Plugin: "git"}
+		err := def.Validate(reg)
+		require.ErrorIs(t, err, ErrInvalid)
+		assert.Contains(t, err.Error(), "trigger.event is required")
+	})
+
+	t.Run("unknown plugin trigger", func(t *testing.T) {
+		def := parseExample(t)
+		def.Trigger = Trigger{Plugin: "git", Event: "tag"}
+		err := def.Validate(reg)
+		require.ErrorIs(t, err, ErrInvalid)
+		assert.Contains(t, err.Error(), "git/tag")
+	})
+
+	t.Run("empty match key", func(t *testing.T) {
+		def := parseExample(t)
+		def.Trigger = Trigger{Plugin: "git", Event: "push", Match: map[string]json.RawMessage{"": json.RawMessage(`1`)}}
+		err := def.Validate(reg)
+		require.ErrorIs(t, err, ErrInvalid)
+		assert.Contains(t, err.Error(), "match keys must not be empty")
 	})
 
 	t.Run("no steps", func(t *testing.T) {
@@ -283,5 +336,64 @@ func TestValidate(t *testing.T) {
 		assert.Contains(t, err.Error(), "label is required")
 		assert.Contains(t, err.Error(), "ghost")
 		assert.Contains(t, err.Error(), "step assess: retry")
+	})
+}
+
+func TestParseJSON(t *testing.T) {
+	t.Run("valid definition", func(t *testing.T) {
+		def, err := ParseJSON([]byte(`{"name":"x","start":"a","steps":{"a":{"uses":"u","timeout":"30m","on":{"ok":"end"}}}}`))
+		require.NoError(t, err)
+		assert.Equal(t, "x", def.Name)
+		assert.Equal(t, Duration(30*time.Minute), def.Steps["a"].Timeout)
+	})
+
+	t.Run("unknown field rejected", func(t *testing.T) {
+		_, err := ParseJSON([]byte(`{"name":"x","bogus":1}`))
+		require.ErrorIs(t, err, ErrInvalid)
+	})
+
+	t.Run("malformed json rejected", func(t *testing.T) {
+		_, err := ParseJSON([]byte(`{"name":`))
+		require.ErrorIs(t, err, ErrInvalid)
+	})
+}
+
+func TestDefinitionYAML(t *testing.T) {
+	t.Run("example round trips", func(t *testing.T) {
+		def := parseExample(t)
+
+		out, err := def.YAML()
+		require.NoError(t, err)
+		back, err := Parse(out)
+
+		require.NoError(t, err)
+		assert.Equal(t, def, back)
+	})
+
+	t.Run("full definition round trips", func(t *testing.T) {
+		def := Definition{
+			Name:        "full",
+			Description: "all fields",
+			Trigger:     Trigger{Plugin: "git", Event: "push", Match: map[string]json.RawMessage{"branch": json.RawMessage(`"main"`), "n": json.RawMessage(`3`)}},
+			Start:       "a",
+			Steps: map[string]StepDef{
+				"a": {
+					Description: "first",
+					Uses:        "docs.readme",
+					With:        json.RawMessage(`{"k":"${vars.x}"}`),
+					Timeout:     Duration(90 * time.Second),
+					Retry:       2,
+					On:          map[step.Outcome]string{"ok": TargetEnd},
+				},
+			},
+		}
+
+		out, err := def.YAML()
+		require.NoError(t, err)
+		back, err := Parse(out)
+
+		require.NoError(t, err)
+		assert.Equal(t, def, back)
+		assert.Contains(t, string(out), "1m30s")
 	})
 }

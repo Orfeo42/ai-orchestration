@@ -59,13 +59,15 @@ func TestGetWorkflowVersion(t *testing.T) {
 }
 
 func TestLatestWorkflowVersions(t *testing.T) {
-	t.Run("returns newest version per name", func(t *testing.T) {
+	t.Run("returns current version per name ordered by name", func(t *testing.T) {
 		e := newEnv(t)
 		ctx := context.Background()
 		newest, err := e.store.UpsertWorkflowVersion(ctx, process.WorkflowVersion{Name: "wf", Hash: "h2", Definition: []byte(`{}`), SourceYAML: "y"})
 		require.NoError(t, err)
 		other, err := e.store.UpsertWorkflowVersion(ctx, process.WorkflowVersion{Name: "other", Hash: "h1", Definition: []byte(`{}`), SourceYAML: "y"})
 		require.NoError(t, err)
+		require.NoError(t, e.store.SetCurrentWorkflow(ctx, "wf", newest.ID))
+		require.NoError(t, e.store.SetCurrentWorkflow(ctx, "other", other.ID))
 
 		got, err := e.store.LatestWorkflowVersions(ctx)
 
@@ -73,6 +75,77 @@ func TestLatestWorkflowVersions(t *testing.T) {
 		require.Len(t, got, 2)
 		assert.Equal(t, other.ID, got[0].ID)
 		assert.Equal(t, newest.ID, got[1].ID)
+	})
+}
+
+func TestSetCurrentWorkflow(t *testing.T) {
+	t.Run("switches latest to the given version", func(t *testing.T) {
+		e := newEnv(t)
+		ctx := context.Background()
+		require.NoError(t, e.store.SetCurrentWorkflow(ctx, "wf", e.versionID))
+		newer, err := e.store.UpsertWorkflowVersion(ctx, process.WorkflowVersion{Name: "wf", Hash: "h2", Definition: []byte(`{}`), SourceYAML: "y"})
+		require.NoError(t, err)
+
+		require.NoError(t, e.store.SetCurrentWorkflow(ctx, "wf", newer.ID))
+		got, err := e.store.LatestWorkflowVersions(ctx)
+		require.NoError(t, err)
+		require.Len(t, got, 1)
+		assert.Equal(t, newer.ID, got[0].ID)
+
+		require.NoError(t, e.store.SetCurrentWorkflow(ctx, "wf", e.versionID))
+		got, err = e.store.LatestWorkflowVersions(ctx)
+		require.NoError(t, err)
+		require.Len(t, got, 1)
+		assert.Equal(t, e.versionID, got[0].ID)
+	})
+}
+
+func TestSeedWorkflow(t *testing.T) {
+	t.Run("inserts once then returns false", func(t *testing.T) {
+		e := newEnv(t)
+		ctx := context.Background()
+		newer, err := e.store.UpsertWorkflowVersion(ctx, process.WorkflowVersion{Name: "wf", Hash: "h2", Definition: []byte(`{}`), SourceYAML: "y"})
+		require.NoError(t, err)
+
+		inserted, err := e.store.SeedWorkflow(ctx, "wf", e.versionID)
+		require.NoError(t, err)
+		assert.True(t, inserted)
+		inserted, err = e.store.SeedWorkflow(ctx, "wf", newer.ID)
+		require.NoError(t, err)
+		assert.False(t, inserted)
+
+		got, err := e.store.LatestWorkflowVersions(ctx)
+		require.NoError(t, err)
+		require.Len(t, got, 1)
+		assert.Equal(t, e.versionID, got[0].ID)
+	})
+}
+
+func TestDeleteWorkflow(t *testing.T) {
+	t.Run("existing workflow is removed from latest and versions are kept", func(t *testing.T) {
+		e := newEnv(t)
+		ctx := context.Background()
+		require.NoError(t, e.store.SetCurrentWorkflow(ctx, "wf", e.versionID))
+
+		deleted, err := e.store.DeleteWorkflow(ctx, "wf")
+
+		require.NoError(t, err)
+		assert.True(t, deleted)
+		latest, err := e.store.LatestWorkflowVersions(ctx)
+		require.NoError(t, err)
+		assert.Empty(t, latest)
+		versions, err := e.store.ListWorkflowVersions(ctx, "wf")
+		require.NoError(t, err)
+		assert.Len(t, versions, 1)
+	})
+
+	t.Run("unknown workflow returns false", func(t *testing.T) {
+		e := newEnv(t)
+
+		deleted, err := e.store.DeleteWorkflow(context.Background(), "nope")
+
+		require.NoError(t, err)
+		assert.False(t, deleted)
 	})
 }
 

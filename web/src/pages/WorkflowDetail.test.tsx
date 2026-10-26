@@ -1,4 +1,5 @@
 import { screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import * as api from "@/api";
 import { makeWorkflow } from "@/test/fixtures";
@@ -74,5 +75,45 @@ describe("WorkflowDetailPage", () => {
     renderDetail();
 
     expect(await screen.findByRole("alert")).toHaveTextContent("not found");
+  });
+
+  it("links to the editor", async () => {
+    vi.mocked(api.listWorkflowVersions).mockResolvedValue([makeWorkflow()]);
+    mermaidMock.render.mockResolvedValue({ svg: "<svg></svg>" });
+
+    renderDetail();
+
+    expect(await screen.findByRole("link", { name: "Edit" })).toHaveAttribute(
+      "href",
+      "/workflows/implement/edit",
+    );
+  });
+
+  it("deletes the workflow after confirmation and returns to the list", async () => {
+    const user = userEvent.setup();
+    mermaidMock.render.mockResolvedValue({ svg: "<svg></svg>" });
+    vi.mocked(api.listWorkflowVersions).mockResolvedValue([makeWorkflow()]);
+    vi.mocked(api.deleteWorkflow).mockResolvedValue();
+
+    renderDetail();
+    await user.click(await screen.findByRole("button", { name: "Delete" }));
+    expect(api.deleteWorkflow).not.toHaveBeenCalled();
+    await user.click(screen.getByRole("button", { name: "Delete workflow" }));
+
+    expect(api.deleteWorkflow).toHaveBeenCalledWith("implement");
+    expect(await screen.findByText("workflow list page")).toBeVisible();
+  });
+
+  it("shows the error when deleting fails", async () => {
+    const user = userEvent.setup();
+    mermaidMock.render.mockResolvedValue({ svg: "<svg></svg>" });
+    vi.mocked(api.listWorkflowVersions).mockResolvedValue([makeWorkflow()]);
+    vi.mocked(api.deleteWorkflow).mockRejectedValue(new Error("in use"));
+
+    renderDetail();
+    await user.click(await screen.findByRole("button", { name: "Delete" }));
+    await user.click(screen.getByRole("button", { name: "Delete workflow" }));
+
+    expect(await screen.findByText("in use")).toBeVisible();
   });
 });

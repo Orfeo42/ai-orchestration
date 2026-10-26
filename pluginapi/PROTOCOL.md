@@ -16,7 +16,7 @@ The machine-readable contract is `openapi.yaml`; the Go types are in this module
 
 - Plugins are container images (from the monorepo or any external repo, published to a git registry) deployed by compose or Helm. The core never starts containers; it only knows each plugin's base URL and token.
 - At registration and on refresh the core fetches `GET /v1/manifest` and validates it: `protocol` supported, names match their patterns, action names unique, every action has a `mode`, at least one outcome and valid JSON Schemas for input and output, capabilities known. A failing manifest means the plugin is not registered.
-- When a workflow is saved, every `uses` must resolve to a registered action, every declared outcome must be handled, and the step's `with` must validate against the action's `input_schema`.
+- When a workflow is saved, every `uses` must resolve to a registered action, every declared outcome must be handled, and the step's `with` must validate against the action's `input_schema` when it contains no expressions. `with` may reference earlier data with `${...}` expressions: a string that is exactly `${path}` is replaced by the JSON value at that path, `${path}` inside a longer string is interpolated (scalars only), `$${` escapes a literal `${`. The scope is `vars` (process vars), `subject` (`kind`, `key`, `url`, `title`) and `process` (`id`, `workflow`, `project`). After resolution the input is always validated against `input_schema` before the job starts; an unresolved expression or an invalid input fails the step without retry.
 
 ## Authentication
 
@@ -72,7 +72,7 @@ Request body `JobRequest`: `job_id`, `process_id`, `input` (must validate agains
 
 ### Result
 
-`Result`: `job_id`, `outcome` (declared outcome; required when `error` is absent), `output` (JSON that validates against the action's `output_schema`, merged into the process vars), `error` (`kind` `upstream` or `internal`, `message`), `usage` (token counts).
+`Result`: `job_id`, `outcome` (declared outcome; required when `error` is absent), `output` (JSON that validates against the action's `output_schema`, stored in the process vars under the step id, so later steps read it as `${vars.<step_id>...}`), `error` (`kind` `upstream` or `internal`, `message`), `usage` (token counts).
 
 - `error` set means an infrastructure failure: `upstream` for a dependency fault (Forgejo, Claude, hub, timeouts), `internal` for the plugin's own fault. The core retries the step per its retry policy; after the last attempt the process fails with that `error_kind`.
 - A business result that is not success is an outcome (e.g. `tests_failed`, `not_found`), never an error.
@@ -84,7 +84,7 @@ An async job sends `Progress{job_id, phase, message?, usage?, at}` to `progress_
 
 ### Triggers
 
-`POST /api/v1/triggers` with `TriggerEvent{plugin, trigger, subject{kind, key, url?, title?}, payload, dedup_key?, at}` → `202 TriggerAccepted{process_ids}` (possibly empty). The core starts every workflow whose trigger matches `<plugin>/<trigger>`; `payload` must validate against the trigger's `payload_schema` and becomes the process's initial vars. The same `(workflow, subject.key)` never gets a second process, so re-emitting an event is safe.
+`POST /api/v1/triggers` with `TriggerEvent{plugin, trigger, subject{kind, key, url?, title?}, payload, dedup_key?, at}` → `202 TriggerAccepted{process_ids}` (possibly empty). The core starts every workflow whose trigger matches `<plugin>/<trigger>`; `payload` must validate against the trigger's `payload_schema` and becomes the process's initial var `trigger` (`${vars.trigger...}`). A workflow trigger is `plugin` + `event` with an optional `match`: every key is a dot path into the payload that must equal the given JSON value. The same `(workflow, subject.key)` never gets a second process, so re-emitting an event is safe.
 
 ## Limits and timing
 

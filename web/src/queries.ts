@@ -7,6 +7,8 @@ import {
 import {
   cancelProcess,
   cancelStepRun,
+  deleteWorkflow,
+  getCatalog,
   getFailures,
   getProcess,
   getStepRunDiff,
@@ -14,17 +16,22 @@ import {
   getTokenPoints,
   getWorkflowStats,
   injectNote,
+  listPlugins,
   listProcesses,
   listStepRunEvents,
   listWorkflows,
   listWorkflowVersions,
+  refreshPlugin,
+  registerPlugin,
+  removePlugin,
   retryProcess,
+  saveWorkflow,
   signalProcess,
   startProcess,
   type DateRange,
   type ProcessFilters,
 } from "./api";
-import type { Grouping } from "./process-types";
+import type { Grouping, WorkflowDefinition } from "./process-types";
 import { isProcessTerminal } from "./lib/status";
 
 export const POLL_INTERVAL_MS = 5000;
@@ -77,6 +84,81 @@ export function useWorkflowVersions(name: string) {
   return useQuery({
     queryKey: ["workflow-versions", name],
     queryFn: () => listWorkflowVersions(name),
+    enabled: name !== "",
+  });
+}
+
+export function useCatalog() {
+  return useQuery({ queryKey: ["catalog"], queryFn: getCatalog });
+}
+
+export function usePlugins() {
+  return useQuery({ queryKey: ["plugins"], queryFn: listPlugins });
+}
+
+export function useRegisterPlugin() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { name: string; baseUrl: string }) =>
+      registerPlugin(input.name, input.baseUrl),
+    onSuccess: async () => {
+      await Promise.all([
+        qc.invalidateQueries({ queryKey: ["plugins"] }),
+        qc.invalidateQueries({ queryKey: ["catalog"] }),
+      ]);
+    },
+  });
+}
+
+export function useRefreshPlugin(name: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => refreshPlugin(name),
+    onSuccess: async () => {
+      await Promise.all([
+        qc.invalidateQueries({ queryKey: ["plugins"] }),
+        qc.invalidateQueries({ queryKey: ["catalog"] }),
+      ]);
+    },
+  });
+}
+
+export function useRemovePlugin(name: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => removePlugin(name),
+    onSuccess: async () => {
+      await Promise.all([
+        qc.invalidateQueries({ queryKey: ["plugins"] }),
+        qc.invalidateQueries({ queryKey: ["catalog"] }),
+      ]);
+    },
+  });
+}
+
+export function useSaveWorkflow() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (definition: WorkflowDefinition) => saveWorkflow(definition),
+    onSuccess: async (_saved, definition) => {
+      await Promise.all([
+        qc.invalidateQueries({ queryKey: ["workflows"] }),
+        qc.invalidateQueries({
+          queryKey: ["workflow-versions", definition.name],
+        }),
+      ]);
+    },
+  });
+}
+
+export function useDeleteWorkflow(name: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => deleteWorkflow(name),
+    onSuccess: async () => {
+      qc.removeQueries({ queryKey: ["workflow-versions", name] });
+      await qc.invalidateQueries({ queryKey: ["workflows"] });
+    },
   });
 }
 

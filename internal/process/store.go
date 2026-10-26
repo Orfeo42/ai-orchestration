@@ -3,6 +3,7 @@ package process
 import (
 	"context"
 	"database/sql"
+	"time"
 
 	"github.com/Orfeo42/ai-orchestration/internal/events"
 )
@@ -29,11 +30,16 @@ type Querier interface {
 	SetStepIteration(ctx context.Context, stepRunID string, iteration int) error
 	SetStepSession(ctx context.Context, stepRunID, session string) error
 	AddStepUsage(ctx context.Context, stepRunID string, usage events.TokenUsage) error
+	TouchStepHeartbeat(ctx context.Context, stepRunID string) (bool, error)
+	ListStaleJobs(ctx context.Context, now time.Time) ([]StaleJob, error)
 
 	UpsertWorkflowVersion(ctx context.Context, v WorkflowVersion) (WorkflowVersion, error)
 	GetWorkflowVersion(ctx context.Context, id int64) (WorkflowVersion, error)
 	LatestWorkflowVersions(ctx context.Context) ([]WorkflowVersion, error)
 	ListWorkflowVersions(ctx context.Context, name string) ([]WorkflowVersion, error)
+	SetCurrentWorkflow(ctx context.Context, name string, versionID int64) error
+	SeedWorkflow(ctx context.Context, name string, versionID int64) (bool, error)
+	DeleteWorkflow(ctx context.Context, name string) (bool, error)
 }
 
 type Tx interface {

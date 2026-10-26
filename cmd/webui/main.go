@@ -2,12 +2,14 @@ package main
 
 import (
 	"log/slog"
+	"time"
 
 	"github.com/riverqueue/river"
 
 	"github.com/Orfeo42/ai-orchestration/internal/analytics/postgres"
 	"github.com/Orfeo42/ai-orchestration/internal/engine"
 	"github.com/Orfeo42/ai-orchestration/internal/forgejo"
+	"github.com/Orfeo42/ai-orchestration/internal/plugins"
 	"github.com/Orfeo42/ai-orchestration/internal/projects"
 	"github.com/Orfeo42/ai-orchestration/internal/runtime"
 	"github.com/Orfeo42/ai-orchestration/internal/step"
@@ -22,8 +24,14 @@ func main() {
 	redisURL := runtime.EnvOr("REDIS_URL", "redis://redis:6379")
 	projectsPath := runtime.EnvOr("PROJECTS_CONFIG", "/config/projects.json")
 	dsn := runtime.MustEnv("DATABASE_URL")
+	callbackSecret := runtime.MustEnv("CALLBACK_SECRET")
 	forgejoURL := runtime.MustEnv("FORGEJO_URL")
 	forgejoToken := runtime.MustEnv("FORGEJO_TOKEN")
+
+	pluginRefresh, err := time.ParseDuration(runtime.EnvOr("PLUGIN_REFRESH_INTERVAL", "30s"))
+	if err != nil {
+		runtime.Die("PLUGIN_REFRESH_INTERVAL", err)
+	}
 
 	ctx, stop := runtime.ShutdownContext()
 	defer stop()
@@ -53,6 +61,7 @@ func main() {
 	p, err := runtime.OpenPlatform(ctx, runtime.PlatformConfig{
 		DSN:      dsn,
 		Registry: reg,
+		Plugins:  runtime.PluginConfig{CallbackSecret: callbackSecret},
 		Control:  ctrl,
 		Engine:   engine.Config{WorkerID: "webui"},
 		River:    &river.Config{},
@@ -64,17 +73,31 @@ func main() {
 
 	fj := forgejo.New(forgejoURL, forgejoToken)
 
+	pl := p.Plugins
+	starter := trigger.New(fj, p.Store, p.Engine, pl.Catalog, trigger.Config{ForgejoURL: forgejoURL, Projects: projectCfgs})
+	plug := &pluginHandler{
+		registry:  plugins.NewRegistry(pl.Store, pl.Clients, pl.Catalog, p.Store),
+		catalog:   pl.Catalog,
+		callbacks: plugins.NewCallbacks(p.Store, pl.Catalog, p.Engine),
+		verifier:  pl.Signer,
+		auth:      pl.Clients,
+		starter:   starter,
+		store:     p.Store,
+		codec:     defaultCodec{catalog: pl.Catalog},
+	}
+	go p.RefreshPlugins(ctx, pluginRefresh)
+
 	proc := &processHandler{
 		reader:  p.Store,
 		engine:  p.Engine,
-		starter: trigger.New(fj, p.Store, p.Engine, reg, trigger.Config{ForgejoURL: forgejoURL, Projects: projectCfgs}),
+		starter: starter,
 		stats:   postgres.New(p.DB.SQL),
 		events:  events,
 		ctrl:    ctrl,
 		fj:      fj,
 	}
 
-	srv, err := newServer(addr, proc)
+	srv, err := newServer(addr, proc, plug)
 	if err != nil {
 		runtime.Die("server", err)
 	}

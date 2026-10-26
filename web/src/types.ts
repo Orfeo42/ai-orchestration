@@ -51,3 +51,63 @@ export interface RunDiffResponse {
   pr_number: number;
   files: FileDiff[];
 }
+
+export type PluginStatus = "ok" | "degraded" | "down" | "unreachable";
+
+export type ActionMode = "sync" | "async";
+
+export interface ActionSpec {
+  name: string;
+  description: string;
+  mode: ActionMode;
+  outcomes: string[];
+  capabilities?: string[];
+  default_timeout_seconds?: number;
+}
+
+export interface TriggerSpec {
+  name: string;
+  description: string;
+  payload_schema?: unknown;
+}
+
+export interface PluginManifest {
+  protocol: string;
+  name: string;
+  version?: string;
+  description: string;
+  actions: ActionSpec[];
+  triggers?: TriggerSpec[];
+}
+
+export interface PluginRecord {
+  name: string;
+  base_url: string;
+  manifest: PluginManifest;
+  status: PluginStatus;
+  error?: string;
+  checked_at: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CatalogStep {
+  name: string;
+  description: string;
+  queue: string;
+  outcomes: string[];
+  input_schema?: unknown;
+  plugin?: string;
+}
+
+export interface CatalogTrigger {
+  plugin: string;
+  name: string;
+  description: string;
+  payload_schema: unknown;
+}
+
+export interface Catalog {
+  steps: CatalogStep[];
+  triggers: CatalogTrigger[];
+}

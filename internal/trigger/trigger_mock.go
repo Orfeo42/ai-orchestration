@@ -148,6 +148,9 @@ var _ Store = &MockStore{}
 //			ListWaitingFunc: func(ctx context.Context, kind process.WaitKind) ([]process.Process, error) {
 //				panic("mock out the ListWaiting method")
 //			},
+//			SeedWorkflowFunc: func(ctx context.Context, name string, versionID int64) (bool, error) {
+//				panic("mock out the SeedWorkflow method")
+//			},
 //			UpsertWorkflowVersionFunc: func(ctx context.Context, v process.WorkflowVersion) (process.WorkflowVersion, error) {
 //				panic("mock out the UpsertWorkflowVersion method")
 //			},
@@ -163,6 +166,9 @@ type MockStore struct {
 
 	// ListWaitingFunc mocks the ListWaiting method.
 	ListWaitingFunc func(ctx context.Context, kind process.WaitKind) ([]process.Process, error)
+
+	// SeedWorkflowFunc mocks the SeedWorkflow method.
+	SeedWorkflowFunc func(ctx context.Context, name string, versionID int64) (bool, error)
 
 	// UpsertWorkflowVersionFunc mocks the UpsertWorkflowVersion method.
 	UpsertWorkflowVersionFunc func(ctx context.Context, v process.WorkflowVersion) (process.WorkflowVersion, error)
@@ -181,6 +187,15 @@ type MockStore struct {
 			// Kind is the kind argument value.
 			Kind process.WaitKind
 		}
+		// SeedWorkflow holds details about calls to the SeedWorkflow method.
+		SeedWorkflow []struct {
+			// Ctx is the ctx argument value.
+			Ctx context.Context
+			// Name is the name argument value.
+			Name string
+			// VersionID is the versionID argument value.
+			VersionID int64
+		}
 		// UpsertWorkflowVersion holds details about calls to the UpsertWorkflowVersion method.
 		UpsertWorkflowVersion []struct {
 			// Ctx is the ctx argument value.
@@ -191,6 +206,7 @@ type MockStore struct {
 	}
 	lockLatestWorkflowVersions sync.RWMutex
 	lockListWaiting            sync.RWMutex
+	lockSeedWorkflow           sync.RWMutex
 	lockUpsertWorkflowVersion  sync.RWMutex
 }
 
@@ -259,6 +275,46 @@ func (mock *MockStore) ListWaitingCalls() []struct {
 	mock.lockListWaiting.RLock()
 	calls = mock.calls.ListWaiting
 	mock.lockListWaiting.RUnlock()
+	return calls
+}
+
+// SeedWorkflow calls SeedWorkflowFunc.
+func (mock *MockStore) SeedWorkflow(ctx context.Context, name string, versionID int64) (bool, error) {
+	if mock.SeedWorkflowFunc == nil {
+		panic("MockStore.SeedWorkflowFunc: method is nil but Store.SeedWorkflow was just called")
+	}
+	callInfo := struct {
+		Ctx       context.Context
+		Name      string
+		VersionID int64
+	}{
+		Ctx:       ctx,
+		Name:      name,
+		VersionID: versionID,
+	}
+	mock.lockSeedWorkflow.Lock()
+	mock.calls.SeedWorkflow = append(mock.calls.SeedWorkflow, callInfo)
+	mock.lockSeedWorkflow.Unlock()
+	return mock.SeedWorkflowFunc(ctx, name, versionID)
+}
+
+// SeedWorkflowCalls gets all the calls that were made to SeedWorkflow.
+// Check the length with:
+//
+//	len(mockedStore.SeedWorkflowCalls())
+func (mock *MockStore) SeedWorkflowCalls() []struct {
+	Ctx       context.Context
+	Name      string
+	VersionID int64
+} {
+	var calls []struct {
+		Ctx       context.Context
+		Name      string
+		VersionID int64
+	}
+	mock.lockSeedWorkflow.RLock()
+	calls = mock.calls.SeedWorkflow
+	mock.lockSeedWorkflow.RUnlock()
 	return calls
 }
 

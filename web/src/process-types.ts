@@ -67,8 +67,9 @@ export interface StepRun {
 }
 
 export interface WorkflowStepDef {
+  description?: string;
   uses: string;
-  with?: Record<string, unknown>;
+  with?: unknown;
   timeout?: string;
   retry?: number;
   on: Record<string, string>;
@@ -77,7 +78,12 @@ export interface WorkflowStepDef {
 export interface WorkflowDefinition {
   name: string;
   description?: string;
-  trigger: { forgejo?: { repos: string[]; label: string; assignee?: string } };
+  trigger: {
+    forgejo?: { repos: string[]; label: string; assignee?: string };
+    plugin?: string;
+    event?: string;
+    match?: Record<string, unknown>;
+  };
   start: string;
   steps: Record<string, WorkflowStepDef>;
 }

@@ -61,3 +61,17 @@ func parseExample(t *testing.T) Definition {
 	require.NoError(t, err)
 	return def
 }
+
+type fakeCatalog struct {
+	*step.Registry
+	triggers map[string]bool
+}
+
+func (c fakeCatalog) HasTrigger(plugin, trigger string) bool {
+	return c.triggers[plugin+"/"+trigger]
+}
+
+func newTestCatalog(t *testing.T) fakeCatalog {
+	t.Helper()
+	return fakeCatalog{Registry: newTestRegistry(t), triggers: map[string]bool{"git/push": true}}
+}

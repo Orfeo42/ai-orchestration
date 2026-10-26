@@ -57,7 +57,11 @@ func startRecorder(t *testing.T, listenAddr, baseURL string) *recorder {
 	t.Cleanup(func() {
 		ctx, cancel := context.WithTimeout(context.WithoutCancel(t.Context()), shutdownTimeout)
 		defer cancel()
-		if err := srv.Shutdown(ctx); err != nil {
+		err := srv.Shutdown(ctx)
+		if errors.Is(err, context.DeadlineExceeded) {
+			err = srv.Close()
+		}
+		if err != nil {
 			t.Errorf("shutdown callback listener: %v", err)
 		}
 		if err := <-served; !errors.Is(err, http.ErrServerClosed) {

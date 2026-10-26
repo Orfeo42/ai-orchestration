@@ -399,4 +399,129 @@ func TestIntegration(t *testing.T) {
 		require.NoError(t, err)
 		assert.False(t, second.Created)
 	})
+
+	t.Run("async job wait completes via CompleteJob and advances", func(t *testing.T) {
+		def := workflow.Definition{
+			Name:  "async",
+			Start: "a",
+			Steps: map[string]workflow.StepDef{
+				"a": {Uses: "fake.async", On: map[step.Outcome]string{step.OutcomeOK: "b"}},
+				"b": {Uses: "fake.b", On: map[step.Outcome]string{step.OutcomeOK: workflow.TargetEnd}},
+			},
+		}
+		var seen json.RawMessage
+		r := newRig(t, def, []fake{
+			{def: okDef("fake.async", step.OutcomeOK), run: asyncRun},
+			{def: okDef("fake.b", step.OutcomeOK), run: func(_ context.Context, sc step.Context) (step.Result, error) {
+				seen = sc.Process.Vars["a"]
+				return step.Result{Outcome: step.OutcomeOK}, nil
+			}},
+		})
+
+		p := r.start(t, "o/r#6")
+		waiting := r.waitStatus(t, p.ID, process.StatusWaiting)
+		require.NotNil(t, waiting.WaitingFor)
+		assert.Equal(t, process.WaitJob, waiting.WaitingFor.Kind)
+		require.NotNil(t, waiting.WaitingFor.Job)
+		run := r.runningRun(t, p.ID, 1)
+		assert.Equal(t, run.ID, waiting.WaitingFor.Job.StepRunID)
+
+		require.NoError(t, r.p.Engine.CompleteJob(context.Background(), engine.JobResult{
+			StepRunID: run.ID,
+			Outcome:   step.OutcomeOK,
+			Output:    json.RawMessage(`{"answer":42}`),
+		}))
+
+		r.waitStatus(t, p.ID, process.StatusSucceeded)
+		runs := r.stepRuns(t, p.ID, 2)
+		assert.Equal(t, process.StepSucceeded, runs[0].Status)
+		assert.Equal(t, "ok", runs[0].Outcome)
+		assert.JSONEq(t, `{"answer":42}`, string(seen))
+	})
+
+	t.Run("async job error is retried and records attempt two", func(t *testing.T) {
+		def := workflow.Definition{
+			Name:  "asyncretry",
+			Start: "a",
+			Steps: map[string]workflow.StepDef{
+				"a": {Uses: "fake.async", Retry: 1, On: map[step.Outcome]string{step.OutcomeOK: workflow.TargetEnd}},
+			},
+		}
+		r := newRig(t, def, []fake{
+			{def: okDef("fake.async", step.OutcomeOK), run: asyncRun},
+		})
+
+		p := r.start(t, "o/r#7")
+		r.waitStatus(t, p.ID, process.StatusWaiting)
+		first := r.runningRun(t, p.ID, 1)
+
+		require.NoError(t, r.p.Engine.CompleteJob(context.Background(), engine.JobResult{
+			StepRunID: first.ID,
+			Error:     "plugin failed",
+			ErrorKind: process.ErrorKindUpstream,
+		}))
+
+		second := r.runningRun(t, p.ID, 2)
+		assert.NotEqual(t, first.ID, second.ID)
+		assert.Equal(t, 2, second.Attempt)
+		require.NoError(t, r.p.Engine.CompleteJob(context.Background(), engine.JobResult{StepRunID: second.ID, Outcome: step.OutcomeOK}))
+
+		r.waitStatus(t, p.ID, process.StatusSucceeded)
+		runs := r.stepRuns(t, p.ID, 2)
+		assert.Equal(t, process.StepFailed, runs[0].Status)
+		assert.Equal(t, process.ErrorKindUpstream, runs[0].ErrorKind)
+		assert.Equal(t, 1, runs[0].Attempt)
+		assert.Equal(t, process.StepSucceeded, runs[1].Status)
+		assert.Equal(t, 2, runs[1].Attempt)
+	})
+
+	t.Run("async job error on last attempt fails the process", func(t *testing.T) {
+		def := workflow.Definition{
+			Name:  "asyncfail",
+			Start: "a",
+			Steps: map[string]workflow.StepDef{
+				"a": {Uses: "fake.async", On: map[step.Outcome]string{step.OutcomeOK: workflow.TargetEnd}},
+			},
+		}
+		r := newRig(t, def, []fake{
+			{def: okDef("fake.async", step.OutcomeOK), run: asyncRun},
+		})
+
+		p := r.start(t, "o/r#8")
+		r.waitStatus(t, p.ID, process.StatusWaiting)
+		run := r.runningRun(t, p.ID, 1)
+
+		require.NoError(t, r.p.Engine.CompleteJob(context.Background(), engine.JobResult{
+			StepRunID: run.ID,
+			Error:     "plugin failed",
+			ErrorKind: process.ErrorKindUpstream,
+		}))
+
+		failed := r.waitStatus(t, p.ID, process.StatusFailed)
+		assert.Equal(t, process.ErrorKindUpstream, failed.ErrorKind)
+		assert.Equal(t, "plugin failed", failed.Error)
+	})
+}
+
+func asyncRun(context.Context, step.Context) (step.Result, error) {
+	return step.Result{Wait: &step.WaitRequest{
+		Kind: process.WaitJob,
+		Job:  &step.JobWait{Plugin: "pl", HeartbeatSeconds: 30, Deadline: time.Now().Add(time.Hour)},
+	}}, nil
+}
+
+func (r *rig) runningRun(t *testing.T, id string, n int) process.StepRun {
+	t.Helper()
+	var running process.StepRun
+	ok := assert.Eventually(t, func() bool {
+		got, err := r.p.Store.ListStepRuns(context.Background(), id)
+		if err != nil || len(got) != n {
+			return false
+		}
+		last := got[len(got)-1]
+		running = last
+		return last.Status == process.StepRunning
+	}, pollDeadline, pollTick, "expected %d step runs with the last running", n)
+	require.True(t, ok)
+	return running
 }

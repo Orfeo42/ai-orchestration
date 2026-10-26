@@ -129,23 +129,24 @@ func TestMigrationIdempotent(t *testing.T) {
 		require.NoError(t, err)
 		t.Cleanup(func() { assert.NoError(t, d.Close()) })
 
-		raw, err := migrationsFS.ReadFile("migrations/00001_process.sql")
-		require.NoError(t, err)
-		upPart, downPart, found := strings.Cut(string(raw), "-- +goose Down")
-		require.True(t, found)
-		up := strings.TrimPrefix(strings.TrimSpace(upPart), "-- +goose Up")
-		down := strings.TrimSpace(downPart)
+		up1, down1 := splitMigration(t, "migrations/00001_process.sql")
+		up2, down2 := splitMigration(t, "migrations/00002_plugins.sql")
 
-		_, err = d.SQL.ExecContext(ctx, up)
-		require.NoError(t, err)
-		_, err = d.SQL.ExecContext(ctx, up)
-		require.NoError(t, err)
-		_, err = d.SQL.ExecContext(ctx, down)
-		require.NoError(t, err)
-		_, err = d.SQL.ExecContext(ctx, down)
-		require.NoError(t, err)
-		_, err = d.SQL.ExecContext(ctx, up)
-		require.NoError(t, err)
+		for _, stmt := range []string{up1, up2, up2, down2, down2, up2, down2, down1, down1, up1, up2} {
+			_, err = d.SQL.ExecContext(ctx, stmt)
+			require.NoError(t, err)
+		}
 		assert.True(t, tableExists(t, d, "process"))
+		assert.True(t, tableExists(t, d, "workflow"))
+		assert.True(t, tableExists(t, d, "plugin"))
 	})
+}
+
+func splitMigration(t *testing.T, path string) (string, string) {
+	t.Helper()
+	raw, err := migrationsFS.ReadFile(path)
+	require.NoError(t, err)
+	upPart, downPart, found := strings.Cut(string(raw), "-- +goose Down")
+	require.True(t, found)
+	return strings.TrimPrefix(strings.TrimSpace(upPart), "-- +goose Up"), strings.TrimSpace(downPart)
 }

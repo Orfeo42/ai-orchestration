@@ -8,6 +8,7 @@ import (
 
 	"github.com/Orfeo42/ai-orchestration/internal/engine"
 	"github.com/Orfeo42/ai-orchestration/internal/forgejo"
+	"github.com/Orfeo42/ai-orchestration/internal/plugins"
 	"github.com/Orfeo42/ai-orchestration/internal/runtime"
 	"github.com/Orfeo42/ai-orchestration/internal/step"
 	"github.com/Orfeo42/ai-orchestration/internal/steps"
@@ -48,7 +49,11 @@ func main() {
 	}
 	defer runtime.CloseAll("platform", p)
 
-	svc := trigger.New(fj, p.Store, p.Engine, reg, trigger.Config{
+	pl := p.Plugins
+	pluginRegistry := plugins.NewRegistry(pl.Store, pl.Clients, pl.Catalog, p.Store)
+	watchdog := plugins.NewWatchdog(p.Store, pl.Catalog, pl.Clients, plugins.NewCallbacks(p.Store, pl.Catalog, p.Engine))
+
+	svc := trigger.New(fj, p.Store, p.Engine, pl.Catalog, trigger.Config{
 		ForgejoURL: cfg.forgejoURL,
 		Projects:   cfg.projects,
 		BotUser:    bot,
@@ -73,8 +78,11 @@ func main() {
 			return
 		case <-ticker.C:
 		}
-		if err := svc.SyncWorkflows(ctx, cfg.workflowsDir); err != nil {
-			slog.ErrorContext(ctx, "sync workflows failed", slog.Any("error", err))
+		if err := pluginRegistry.RefreshAll(ctx); err != nil {
+			slog.ErrorContext(ctx, "refresh plugins failed", slog.Any("error", err))
+		}
+		if err := watchdog.Check(ctx, time.Now().UTC()); err != nil {
+			slog.ErrorContext(ctx, "plugin watchdog failed", slog.Any("error", err))
 		}
 		if err := svc.Poll(ctx); err != nil {
 			slog.ErrorContext(ctx, "poll failed", slog.Any("error", err))

@@ -1,7 +1,10 @@
 import { useMemo } from "react";
-import { useParams } from "react-router";
+import { Link, useParams } from "react-router";
+import { Pencil } from "lucide-react";
+import { DeleteWorkflowDialog } from "@/components/DeleteWorkflowDialog";
 import { WorkflowGraph } from "@/components/WorkflowGraph";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Button } from "@/components/ui/button";
 import {
   Card,
   CardContent,
@@ -53,13 +56,24 @@ function WorkflowDetailView({ name }: ViewProps) {
 
   return (
     <div className="flex flex-col gap-5">
-      <div className="flex flex-col gap-1">
-        <h1 className="text-2xl font-semibold tracking-tight">{name}</h1>
-        {latest.definition.description !== undefined && (
-          <p className="text-sm text-muted-foreground">
-            {latest.definition.description}
-          </p>
-        )}
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex flex-col gap-1">
+          <h1 className="text-2xl font-semibold tracking-tight">{name}</h1>
+          {latest.definition.description !== undefined && (
+            <p className="text-sm text-muted-foreground">
+              {latest.definition.description}
+            </p>
+          )}
+        </div>
+        <div className="flex gap-2">
+          <Button asChild variant="outline" size="sm">
+            <Link to={`/workflows/${encodeURIComponent(name)}/edit`}>
+              <Pencil />
+              Edit
+            </Link>
+          </Button>
+          <DeleteWorkflowDialog name={name} />
+        </div>
       </div>
 
       <Card>

@@ -58,15 +58,19 @@ type ForgejoTrigger struct {
 }
 
 type Trigger struct {
-	Forgejo *ForgejoTrigger `json:"forgejo,omitempty"`
+	Forgejo *ForgejoTrigger            `json:"forgejo,omitempty"`
+	Plugin  string                     `json:"plugin,omitempty"`
+	Event   string                     `json:"event,omitempty"`
+	Match   map[string]json.RawMessage `json:"match,omitempty"`
 }
 
 type StepDef struct {
-	Uses    string                  `json:"uses"`
-	With    json.RawMessage         `json:"with,omitempty"`
-	Timeout Duration                `json:"timeout,omitempty"`
-	Retry   int                     `json:"retry,omitempty"`
-	On      map[step.Outcome]string `json:"on"`
+	Description string                  `json:"description,omitempty"`
+	Uses        string                  `json:"uses"`
+	With        json.RawMessage         `json:"with,omitempty"`
+	Timeout     Duration                `json:"timeout,omitempty"`
+	Retry       int                     `json:"retry,omitempty"`
+	On          map[step.Outcome]string `json:"on"`
 }
 
 type Definition struct {
@@ -107,21 +111,15 @@ func Parse(source []byte) (Definition, error) {
 	if err != nil {
 		return Definition{}, fmt.Errorf("%w: yaml: %w", ErrInvalid, err)
 	}
-	dec := json.NewDecoder(bytes.NewReader(raw))
-	dec.DisallowUnknownFields()
-	var d Definition
-	if err := dec.Decode(&d); err != nil {
-		return Definition{}, fmt.Errorf("%w: %w", ErrInvalid, err)
-	}
-	return d, nil
+	return ParseJSON(raw)
 }
 
-func (d Definition) Validate(reg *step.Registry) error {
+func (d Definition) Validate(reg step.Catalog) error {
 	var errs []error
 	if d.Name == "" {
 		errs = append(errs, fmt.Errorf("%w: name is required", ErrInvalid))
 	}
-	errs = append(errs, d.Trigger.validate()...)
+	errs = append(errs, d.Trigger.validate(reg)...)
 	if len(d.Steps) == 0 {
 		errs = append(errs, fmt.Errorf("%w: at least one step is required", ErrInvalid))
 	}
@@ -135,27 +133,52 @@ func (d Definition) Validate(reg *step.Registry) error {
 	return errors.Join(errs...)
 }
 
-func (t Trigger) validate() []error {
-	if t.Forgejo == nil {
-		return []error{fmt.Errorf("%w: trigger.forgejo is required", ErrInvalid)}
-	}
+func (t Trigger) validate(cat step.Catalog) []error {
 	var errs []error
-	if len(t.Forgejo.Repos) == 0 {
+	if t.Forgejo != nil && t.Plugin != "" {
+		errs = append(errs, fmt.Errorf("%w: trigger.forgejo and trigger.plugin are mutually exclusive", ErrInvalid))
+	}
+	if t.Forgejo != nil {
+		errs = append(errs, t.Forgejo.validate()...)
+	}
+	if t.Plugin == "" && t.Event != "" {
+		errs = append(errs, fmt.Errorf("%w: trigger.event requires trigger.plugin", ErrInvalid))
+	}
+	if t.Plugin == "" && len(t.Match) > 0 {
+		errs = append(errs, fmt.Errorf("%w: trigger.match requires trigger.plugin", ErrInvalid))
+	}
+	if t.Plugin != "" && t.Event == "" {
+		errs = append(errs, fmt.Errorf("%w: trigger.event is required with trigger.plugin", ErrInvalid))
+	}
+	if t.Plugin != "" && t.Event != "" && !cat.HasTrigger(t.Plugin, t.Event) {
+		errs = append(errs, fmt.Errorf("%w: trigger %s/%s is not provided by any plugin", ErrInvalid, t.Plugin, t.Event))
+	}
+	for _, key := range slices.Sorted(maps.Keys(t.Match)) {
+		if key == "" {
+			errs = append(errs, fmt.Errorf("%w: trigger.match keys must not be empty", ErrInvalid))
+		}
+	}
+	return errs
+}
+
+func (f ForgejoTrigger) validate() []error {
+	var errs []error
+	if len(f.Repos) == 0 {
 		errs = append(errs, fmt.Errorf("%w: trigger.forgejo.repos needs at least one repo", ErrInvalid))
 	}
-	for _, repo := range t.Forgejo.Repos {
+	for _, repo := range f.Repos {
 		owner, name, found := strings.Cut(repo, "/")
 		if !found || owner == "" || name == "" || strings.Contains(name, "/") {
 			errs = append(errs, fmt.Errorf("%w: trigger.forgejo.repos entry %q must be owner/repo", ErrInvalid, repo))
 		}
 	}
-	if t.Forgejo.Label == "" {
+	if f.Label == "" {
 		errs = append(errs, fmt.Errorf("%w: trigger.forgejo.label is required", ErrInvalid))
 	}
 	return errs
 }
 
-func (d Definition) validateStep(reg *step.Registry, id string) []error {
+func (d Definition) validateStep(reg step.Catalog, id string) []error {
 	s := d.Steps[id]
 	var errs []error
 	if id == TargetEnd || id == TargetFail {
@@ -217,4 +240,30 @@ func (d Definition) validateReachable() []error {
 		}
 	}
 	return errs
+}
+
+func ParseJSON(raw []byte) (Definition, error) {
+	var compact bytes.Buffer
+	if err := json.Compact(&compact, raw); err != nil {
+		return Definition{}, fmt.Errorf("%w: %w", ErrInvalid, err)
+	}
+	dec := json.NewDecoder(&compact)
+	dec.DisallowUnknownFields()
+	var d Definition
+	if err := dec.Decode(&d); err != nil {
+		return Definition{}, fmt.Errorf("%w: %w", ErrInvalid, err)
+	}
+	return d, nil
+}
+
+func (d Definition) YAML() ([]byte, error) {
+	raw, err := json.Marshal(d)
+	if err != nil {
+		return nil, fmt.Errorf("encode workflow: %w", err)
+	}
+	out, err := yaml.JSONToYAML(raw)
+	if err != nil {
+		return nil, fmt.Errorf("convert workflow to yaml: %w", err)
+	}
+	return out, nil
 }

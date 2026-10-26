@@ -8,6 +8,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/Orfeo42/ai-orchestration/internal/runtime"
 )
 
 func baseEnv(t *testing.T) {
@@ -18,6 +20,8 @@ func baseEnv(t *testing.T) {
 	t.Setenv("FORGEJO_URL", "http://forgejo")
 	t.Setenv("FORGEJO_TOKEN", "tok")
 	t.Setenv("DATABASE_URL", "postgres://x")
+	t.Setenv("CORE_PUBLIC_URL", "http://core:8080")
+	t.Setenv("CALLBACK_SECRET", "secret")
 	t.Setenv("PROJECTS_CONFIG", projectsFile)
 	t.Setenv("WORKER_ID", "w1")
 	t.Setenv("CLAUDE_CODE_OAUTH_TOKEN", "")
@@ -91,6 +95,22 @@ func TestLoadConfig(t *testing.T) {
 		t.Setenv("DEFAULT_QUEUE_MAX_WORKERS", "0")
 		_, err := loadConfig([]string{"default"})
 		require.ErrorIs(t, err, errInvalidMaxWorkers)
+	})
+
+	t.Run("plugin config loaded", func(t *testing.T) {
+		baseEnv(t)
+		t.Setenv("PLUGIN_REFRESH_INTERVAL", "45s")
+		cfg, err := loadConfig([]string{"default"})
+		require.NoError(t, err)
+		assert.Equal(t, runtime.PluginConfig{PublicURL: "http://core:8080", CallbackSecret: "secret"}, cfg.plugins)
+		assert.Equal(t, 45*time.Second, cfg.pluginRefresh)
+	})
+
+	t.Run("invalid plugin refresh interval", func(t *testing.T) {
+		baseEnv(t)
+		t.Setenv("PLUGIN_REFRESH_INTERVAL", "often")
+		_, err := loadConfig([]string{"default"})
+		require.ErrorContains(t, err, "PLUGIN_REFRESH_INTERVAL")
 	})
 
 	t.Run("invalid step timeout", func(t *testing.T) {

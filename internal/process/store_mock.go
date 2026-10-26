@@ -8,6 +8,7 @@ import (
 	"database/sql"
 	"github.com/Orfeo42/ai-orchestration/internal/events"
 	"sync"
+	"time"
 )
 
 // Ensure, that MockStore does implement Store.
@@ -28,6 +29,9 @@ var _ Store = &MockStore{}
 //			},
 //			CreateProcessFunc: func(ctx context.Context, p Process) (bool, error) {
 //				panic("mock out the CreateProcess method")
+//			},
+//			DeleteWorkflowFunc: func(ctx context.Context, name string) (bool, error) {
+//				panic("mock out the DeleteWorkflow method")
 //			},
 //			FinishProcessFunc: func(ctx context.Context, processID string, finish Finish) (bool, error) {
 //				panic("mock out the FinishProcess method")
@@ -53,6 +57,9 @@ var _ Store = &MockStore{}
 //			ListProcessesFunc: func(ctx context.Context, filter ListFilter) (Page, error) {
 //				panic("mock out the ListProcesses method")
 //			},
+//			ListStaleJobsFunc: func(ctx context.Context, now time.Time) ([]StaleJob, error) {
+//				panic("mock out the ListStaleJobs method")
+//			},
 //			ListStepRunsFunc: func(ctx context.Context, processID string) ([]StepRun, error) {
 //				panic("mock out the ListStepRuns method")
 //			},
@@ -67,6 +74,12 @@ var _ Store = &MockStore{}
 //			},
 //			MergeVarsFunc: func(ctx context.Context, processID string, vars Vars) error {
 //				panic("mock out the MergeVars method")
+//			},
+//			SeedWorkflowFunc: func(ctx context.Context, name string, versionID int64) (bool, error) {
+//				panic("mock out the SeedWorkflow method")
+//			},
+//			SetCurrentWorkflowFunc: func(ctx context.Context, name string, versionID int64) error {
+//				panic("mock out the SetCurrentWorkflow method")
 //			},
 //			SetNextFunc: func(ctx context.Context, processID string, next Next) (bool, error) {
 //				panic("mock out the SetNext method")
@@ -86,6 +99,9 @@ var _ Store = &MockStore{}
 //			StartStepRunFunc: func(ctx context.Context, run StepRun) error {
 //				panic("mock out the StartStepRun method")
 //			},
+//			TouchStepHeartbeatFunc: func(ctx context.Context, stepRunID string) (bool, error) {
+//				panic("mock out the TouchStepHeartbeat method")
+//			},
 //			UpsertWorkflowVersionFunc: func(ctx context.Context, v WorkflowVersion) (WorkflowVersion, error) {
 //				panic("mock out the UpsertWorkflowVersion method")
 //			},
@@ -104,6 +120,9 @@ type MockStore struct {
 
 	// CreateProcessFunc mocks the CreateProcess method.
 	CreateProcessFunc func(ctx context.Context, p Process) (bool, error)
+
+	// DeleteWorkflowFunc mocks the DeleteWorkflow method.
+	DeleteWorkflowFunc func(ctx context.Context, name string) (bool, error)
 
 	// FinishProcessFunc mocks the FinishProcess method.
 	FinishProcessFunc func(ctx context.Context, processID string, finish Finish) (bool, error)
@@ -129,6 +148,9 @@ type MockStore struct {
 	// ListProcessesFunc mocks the ListProcesses method.
 	ListProcessesFunc func(ctx context.Context, filter ListFilter) (Page, error)
 
+	// ListStaleJobsFunc mocks the ListStaleJobs method.
+	ListStaleJobsFunc func(ctx context.Context, now time.Time) ([]StaleJob, error)
+
 	// ListStepRunsFunc mocks the ListStepRuns method.
 	ListStepRunsFunc func(ctx context.Context, processID string) ([]StepRun, error)
 
@@ -143,6 +165,12 @@ type MockStore struct {
 
 	// MergeVarsFunc mocks the MergeVars method.
 	MergeVarsFunc func(ctx context.Context, processID string, vars Vars) error
+
+	// SeedWorkflowFunc mocks the SeedWorkflow method.
+	SeedWorkflowFunc func(ctx context.Context, name string, versionID int64) (bool, error)
+
+	// SetCurrentWorkflowFunc mocks the SetCurrentWorkflow method.
+	SetCurrentWorkflowFunc func(ctx context.Context, name string, versionID int64) error
 
 	// SetNextFunc mocks the SetNext method.
 	SetNextFunc func(ctx context.Context, processID string, next Next) (bool, error)
@@ -161,6 +189,9 @@ type MockStore struct {
 
 	// StartStepRunFunc mocks the StartStepRun method.
 	StartStepRunFunc func(ctx context.Context, run StepRun) error
+
+	// TouchStepHeartbeatFunc mocks the TouchStepHeartbeat method.
+	TouchStepHeartbeatFunc func(ctx context.Context, stepRunID string) (bool, error)
 
 	// UpsertWorkflowVersionFunc mocks the UpsertWorkflowVersion method.
 	UpsertWorkflowVersionFunc func(ctx context.Context, v WorkflowVersion) (WorkflowVersion, error)
@@ -189,6 +220,13 @@ type MockStore struct {
 			Ctx context.Context
 			// P is the p argument value.
 			P Process
+		}
+		// DeleteWorkflow holds details about calls to the DeleteWorkflow method.
+		DeleteWorkflow []struct {
+			// Ctx is the ctx argument value.
+			Ctx context.Context
+			// Name is the name argument value.
+			Name string
 		}
 		// FinishProcess holds details about calls to the FinishProcess method.
 		FinishProcess []struct {
@@ -246,6 +284,13 @@ type MockStore struct {
 			// Filter is the filter argument value.
 			Filter ListFilter
 		}
+		// ListStaleJobs holds details about calls to the ListStaleJobs method.
+		ListStaleJobs []struct {
+			// Ctx is the ctx argument value.
+			Ctx context.Context
+			// Now is the now argument value.
+			Now time.Time
+		}
 		// ListStepRuns holds details about calls to the ListStepRuns method.
 		ListStepRuns []struct {
 			// Ctx is the ctx argument value.
@@ -282,6 +327,24 @@ type MockStore struct {
 			ProcessID string
 			// Vars is the vars argument value.
 			Vars Vars
+		}
+		// SeedWorkflow holds details about calls to the SeedWorkflow method.
+		SeedWorkflow []struct {
+			// Ctx is the ctx argument value.
+			Ctx context.Context
+			// Name is the name argument value.
+			Name string
+			// VersionID is the versionID argument value.
+			VersionID int64
+		}
+		// SetCurrentWorkflow holds details about calls to the SetCurrentWorkflow method.
+		SetCurrentWorkflow []struct {
+			// Ctx is the ctx argument value.
+			Ctx context.Context
+			// Name is the name argument value.
+			Name string
+			// VersionID is the versionID argument value.
+			VersionID int64
 		}
 		// SetNext holds details about calls to the SetNext method.
 		SetNext []struct {
@@ -335,6 +398,13 @@ type MockStore struct {
 			// Run is the run argument value.
 			Run StepRun
 		}
+		// TouchStepHeartbeat holds details about calls to the TouchStepHeartbeat method.
+		TouchStepHeartbeat []struct {
+			// Ctx is the ctx argument value.
+			Ctx context.Context
+			// StepRunID is the stepRunID argument value.
+			StepRunID string
+		}
 		// UpsertWorkflowVersion holds details about calls to the UpsertWorkflowVersion method.
 		UpsertWorkflowVersion []struct {
 			// Ctx is the ctx argument value.
@@ -346,6 +416,7 @@ type MockStore struct {
 	lockActiveStepRun          sync.RWMutex
 	lockAddStepUsage           sync.RWMutex
 	lockCreateProcess          sync.RWMutex
+	lockDeleteWorkflow         sync.RWMutex
 	lockFinishProcess          sync.RWMutex
 	lockFinishStepRun          sync.RWMutex
 	lockGetProcess             sync.RWMutex
@@ -354,17 +425,21 @@ type MockStore struct {
 	lockInTx                   sync.RWMutex
 	lockLatestWorkflowVersions sync.RWMutex
 	lockListProcesses          sync.RWMutex
+	lockListStaleJobs          sync.RWMutex
 	lockListStepRuns           sync.RWMutex
 	lockListWaiting            sync.RWMutex
 	lockListWorkflowVersions   sync.RWMutex
 	lockLockProcess            sync.RWMutex
 	lockMergeVars              sync.RWMutex
+	lockSeedWorkflow           sync.RWMutex
+	lockSetCurrentWorkflow     sync.RWMutex
 	lockSetNext                sync.RWMutex
 	lockSetStepIteration       sync.RWMutex
 	lockSetStepPhase           sync.RWMutex
 	lockSetStepSession         sync.RWMutex
 	lockSetWaiting             sync.RWMutex
 	lockStartStepRun           sync.RWMutex
+	lockTouchStepHeartbeat     sync.RWMutex
 	lockUpsertWorkflowVersion  sync.RWMutex
 }
 
@@ -477,6 +552,42 @@ func (mock *MockStore) CreateProcessCalls() []struct {
 	mock.lockCreateProcess.RLock()
 	calls = mock.calls.CreateProcess
 	mock.lockCreateProcess.RUnlock()
+	return calls
+}
+
+// DeleteWorkflow calls DeleteWorkflowFunc.
+func (mock *MockStore) DeleteWorkflow(ctx context.Context, name string) (bool, error) {
+	if mock.DeleteWorkflowFunc == nil {
+		panic("MockStore.DeleteWorkflowFunc: method is nil but Store.DeleteWorkflow was just called")
+	}
+	callInfo := struct {
+		Ctx  context.Context
+		Name string
+	}{
+		Ctx:  ctx,
+		Name: name,
+	}
+	mock.lockDeleteWorkflow.Lock()
+	mock.calls.DeleteWorkflow = append(mock.calls.DeleteWorkflow, callInfo)
+	mock.lockDeleteWorkflow.Unlock()
+	return mock.DeleteWorkflowFunc(ctx, name)
+}
+
+// DeleteWorkflowCalls gets all the calls that were made to DeleteWorkflow.
+// Check the length with:
+//
+//	len(mockedStore.DeleteWorkflowCalls())
+func (mock *MockStore) DeleteWorkflowCalls() []struct {
+	Ctx  context.Context
+	Name string
+} {
+	var calls []struct {
+		Ctx  context.Context
+		Name string
+	}
+	mock.lockDeleteWorkflow.RLock()
+	calls = mock.calls.DeleteWorkflow
+	mock.lockDeleteWorkflow.RUnlock()
 	return calls
 }
 
@@ -768,6 +879,42 @@ func (mock *MockStore) ListProcessesCalls() []struct {
 	return calls
 }
 
+// ListStaleJobs calls ListStaleJobsFunc.
+func (mock *MockStore) ListStaleJobs(ctx context.Context, now time.Time) ([]StaleJob, error) {
+	if mock.ListStaleJobsFunc == nil {
+		panic("MockStore.ListStaleJobsFunc: method is nil but Store.ListStaleJobs was just called")
+	}
+	callInfo := struct {
+		Ctx context.Context
+		Now time.Time
+	}{
+		Ctx: ctx,
+		Now: now,
+	}
+	mock.lockListStaleJobs.Lock()
+	mock.calls.ListStaleJobs = append(mock.calls.ListStaleJobs, callInfo)
+	mock.lockListStaleJobs.Unlock()
+	return mock.ListStaleJobsFunc(ctx, now)
+}
+
+// ListStaleJobsCalls gets all the calls that were made to ListStaleJobs.
+// Check the length with:
+//
+//	len(mockedStore.ListStaleJobsCalls())
+func (mock *MockStore) ListStaleJobsCalls() []struct {
+	Ctx context.Context
+	Now time.Time
+} {
+	var calls []struct {
+		Ctx context.Context
+		Now time.Time
+	}
+	mock.lockListStaleJobs.RLock()
+	calls = mock.calls.ListStaleJobs
+	mock.lockListStaleJobs.RUnlock()
+	return calls
+}
+
 // ListStepRuns calls ListStepRunsFunc.
 func (mock *MockStore) ListStepRuns(ctx context.Context, processID string) ([]StepRun, error) {
 	if mock.ListStepRunsFunc == nil {
@@ -949,6 +1096,86 @@ func (mock *MockStore) MergeVarsCalls() []struct {
 	mock.lockMergeVars.RLock()
 	calls = mock.calls.MergeVars
 	mock.lockMergeVars.RUnlock()
+	return calls
+}
+
+// SeedWorkflow calls SeedWorkflowFunc.
+func (mock *MockStore) SeedWorkflow(ctx context.Context, name string, versionID int64) (bool, error) {
+	if mock.SeedWorkflowFunc == nil {
+		panic("MockStore.SeedWorkflowFunc: method is nil but Store.SeedWorkflow was just called")
+	}
+	callInfo := struct {
+		Ctx       context.Context
+		Name      string
+		VersionID int64
+	}{
+		Ctx:       ctx,
+		Name:      name,
+		VersionID: versionID,
+	}
+	mock.lockSeedWorkflow.Lock()
+	mock.calls.SeedWorkflow = append(mock.calls.SeedWorkflow, callInfo)
+	mock.lockSeedWorkflow.Unlock()
+	return mock.SeedWorkflowFunc(ctx, name, versionID)
+}
+
+// SeedWorkflowCalls gets all the calls that were made to SeedWorkflow.
+// Check the length with:
+//
+//	len(mockedStore.SeedWorkflowCalls())
+func (mock *MockStore) SeedWorkflowCalls() []struct {
+	Ctx       context.Context
+	Name      string
+	VersionID int64
+} {
+	var calls []struct {
+		Ctx       context.Context
+		Name      string
+		VersionID int64
+	}
+	mock.lockSeedWorkflow.RLock()
+	calls = mock.calls.SeedWorkflow
+	mock.lockSeedWorkflow.RUnlock()
+	return calls
+}
+
+// SetCurrentWorkflow calls SetCurrentWorkflowFunc.
+func (mock *MockStore) SetCurrentWorkflow(ctx context.Context, name string, versionID int64) error {
+	if mock.SetCurrentWorkflowFunc == nil {
+		panic("MockStore.SetCurrentWorkflowFunc: method is nil but Store.SetCurrentWorkflow was just called")
+	}
+	callInfo := struct {
+		Ctx       context.Context
+		Name      string
+		VersionID int64
+	}{
+		Ctx:       ctx,
+		Name:      name,
+		VersionID: versionID,
+	}
+	mock.lockSetCurrentWorkflow.Lock()
+	mock.calls.SetCurrentWorkflow = append(mock.calls.SetCurrentWorkflow, callInfo)
+	mock.lockSetCurrentWorkflow.Unlock()
+	return mock.SetCurrentWorkflowFunc(ctx, name, versionID)
+}
+
+// SetCurrentWorkflowCalls gets all the calls that were made to SetCurrentWorkflow.
+// Check the length with:
+//
+//	len(mockedStore.SetCurrentWorkflowCalls())
+func (mock *MockStore) SetCurrentWorkflowCalls() []struct {
+	Ctx       context.Context
+	Name      string
+	VersionID int64
+} {
+	var calls []struct {
+		Ctx       context.Context
+		Name      string
+		VersionID int64
+	}
+	mock.lockSetCurrentWorkflow.RLock()
+	calls = mock.calls.SetCurrentWorkflow
+	mock.lockSetCurrentWorkflow.RUnlock()
 	return calls
 }
 
@@ -1188,6 +1415,42 @@ func (mock *MockStore) StartStepRunCalls() []struct {
 	return calls
 }
 
+// TouchStepHeartbeat calls TouchStepHeartbeatFunc.
+func (mock *MockStore) TouchStepHeartbeat(ctx context.Context, stepRunID string) (bool, error) {
+	if mock.TouchStepHeartbeatFunc == nil {
+		panic("MockStore.TouchStepHeartbeatFunc: method is nil but Store.TouchStepHeartbeat was just called")
+	}
+	callInfo := struct {
+		Ctx       context.Context
+		StepRunID string
+	}{
+		Ctx:       ctx,
+		StepRunID: stepRunID,
+	}
+	mock.lockTouchStepHeartbeat.Lock()
+	mock.calls.TouchStepHeartbeat = append(mock.calls.TouchStepHeartbeat, callInfo)
+	mock.lockTouchStepHeartbeat.Unlock()
+	return mock.TouchStepHeartbeatFunc(ctx, stepRunID)
+}
+
+// TouchStepHeartbeatCalls gets all the calls that were made to TouchStepHeartbeat.
+// Check the length with:
+//
+//	len(mockedStore.TouchStepHeartbeatCalls())
+func (mock *MockStore) TouchStepHeartbeatCalls() []struct {
+	Ctx       context.Context
+	StepRunID string
+} {
+	var calls []struct {
+		Ctx       context.Context
+		StepRunID string
+	}
+	mock.lockTouchStepHeartbeat.RLock()
+	calls = mock.calls.TouchStepHeartbeat
+	mock.lockTouchStepHeartbeat.RUnlock()
+	return calls
+}
+
 // UpsertWorkflowVersion calls UpsertWorkflowVersionFunc.
 func (mock *MockStore) UpsertWorkflowVersion(ctx context.Context, v WorkflowVersion) (WorkflowVersion, error) {
 	if mock.UpsertWorkflowVersionFunc == nil {
@@ -1243,6 +1506,9 @@ var _ Tx = &MockTx{}
 //			CreateProcessFunc: func(ctx context.Context, p Process) (bool, error) {
 //				panic("mock out the CreateProcess method")
 //			},
+//			DeleteWorkflowFunc: func(ctx context.Context, name string) (bool, error) {
+//				panic("mock out the DeleteWorkflow method")
+//			},
 //			FinishProcessFunc: func(ctx context.Context, processID string, finish Finish) (bool, error) {
 //				panic("mock out the FinishProcess method")
 //			},
@@ -1264,6 +1530,9 @@ var _ Tx = &MockTx{}
 //			ListProcessesFunc: func(ctx context.Context, filter ListFilter) (Page, error) {
 //				panic("mock out the ListProcesses method")
 //			},
+//			ListStaleJobsFunc: func(ctx context.Context, now time.Time) ([]StaleJob, error) {
+//				panic("mock out the ListStaleJobs method")
+//			},
 //			ListStepRunsFunc: func(ctx context.Context, processID string) ([]StepRun, error) {
 //				panic("mock out the ListStepRuns method")
 //			},
@@ -1281,6 +1550,12 @@ var _ Tx = &MockTx{}
 //			},
 //			SQLFunc: func() *sql.Tx {
 //				panic("mock out the SQL method")
+//			},
+//			SeedWorkflowFunc: func(ctx context.Context, name string, versionID int64) (bool, error) {
+//				panic("mock out the SeedWorkflow method")
+//			},
+//			SetCurrentWorkflowFunc: func(ctx context.Context, name string, versionID int64) error {
+//				panic("mock out the SetCurrentWorkflow method")
 //			},
 //			SetNextFunc: func(ctx context.Context, processID string, next Next) (bool, error) {
 //				panic("mock out the SetNext method")
@@ -1300,6 +1575,9 @@ var _ Tx = &MockTx{}
 //			StartStepRunFunc: func(ctx context.Context, run StepRun) error {
 //				panic("mock out the StartStepRun method")
 //			},
+//			TouchStepHeartbeatFunc: func(ctx context.Context, stepRunID string) (bool, error) {
+//				panic("mock out the TouchStepHeartbeat method")
+//			},
 //			UpsertWorkflowVersionFunc: func(ctx context.Context, v WorkflowVersion) (WorkflowVersion, error) {
 //				panic("mock out the UpsertWorkflowVersion method")
 //			},
@@ -1318,6 +1596,9 @@ type MockTx struct {
 
 	// CreateProcessFunc mocks the CreateProcess method.
 	CreateProcessFunc func(ctx context.Context, p Process) (bool, error)
+
+	// DeleteWorkflowFunc mocks the DeleteWorkflow method.
+	DeleteWorkflowFunc func(ctx context.Context, name string) (bool, error)
 
 	// FinishProcessFunc mocks the FinishProcess method.
 	FinishProcessFunc func(ctx context.Context, processID string, finish Finish) (bool, error)
@@ -1340,6 +1621,9 @@ type MockTx struct {
 	// ListProcessesFunc mocks the ListProcesses method.
 	ListProcessesFunc func(ctx context.Context, filter ListFilter) (Page, error)
 
+	// ListStaleJobsFunc mocks the ListStaleJobs method.
+	ListStaleJobsFunc func(ctx context.Context, now time.Time) ([]StaleJob, error)
+
 	// ListStepRunsFunc mocks the ListStepRuns method.
 	ListStepRunsFunc func(ctx context.Context, processID string) ([]StepRun, error)
 
@@ -1358,6 +1642,12 @@ type MockTx struct {
 	// SQLFunc mocks the SQL method.
 	SQLFunc func() *sql.Tx
 
+	// SeedWorkflowFunc mocks the SeedWorkflow method.
+	SeedWorkflowFunc func(ctx context.Context, name string, versionID int64) (bool, error)
+
+	// SetCurrentWorkflowFunc mocks the SetCurrentWorkflow method.
+	SetCurrentWorkflowFunc func(ctx context.Context, name string, versionID int64) error
+
 	// SetNextFunc mocks the SetNext method.
 	SetNextFunc func(ctx context.Context, processID string, next Next) (bool, error)
 
@@ -1375,6 +1665,9 @@ type MockTx struct {
 
 	// StartStepRunFunc mocks the StartStepRun method.
 	StartStepRunFunc func(ctx context.Context, run StepRun) error
+
+	// TouchStepHeartbeatFunc mocks the TouchStepHeartbeat method.
+	TouchStepHeartbeatFunc func(ctx context.Context, stepRunID string) (bool, error)
 
 	// UpsertWorkflowVersionFunc mocks the UpsertWorkflowVersion method.
 	UpsertWorkflowVersionFunc func(ctx context.Context, v WorkflowVersion) (WorkflowVersion, error)
@@ -1403,6 +1696,13 @@ type MockTx struct {
 			Ctx context.Context
 			// P is the p argument value.
 			P Process
+		}
+		// DeleteWorkflow holds details about calls to the DeleteWorkflow method.
+		DeleteWorkflow []struct {
+			// Ctx is the ctx argument value.
+			Ctx context.Context
+			// Name is the name argument value.
+			Name string
 		}
 		// FinishProcess holds details about calls to the FinishProcess method.
 		FinishProcess []struct {
@@ -1453,6 +1753,13 @@ type MockTx struct {
 			// Filter is the filter argument value.
 			Filter ListFilter
 		}
+		// ListStaleJobs holds details about calls to the ListStaleJobs method.
+		ListStaleJobs []struct {
+			// Ctx is the ctx argument value.
+			Ctx context.Context
+			// Now is the now argument value.
+			Now time.Time
+		}
 		// ListStepRuns holds details about calls to the ListStepRuns method.
 		ListStepRuns []struct {
 			// Ctx is the ctx argument value.
@@ -1492,6 +1799,24 @@ type MockTx struct {
 		}
 		// SQL holds details about calls to the SQL method.
 		SQL []struct {
+		}
+		// SeedWorkflow holds details about calls to the SeedWorkflow method.
+		SeedWorkflow []struct {
+			// Ctx is the ctx argument value.
+			Ctx context.Context
+			// Name is the name argument value.
+			Name string
+			// VersionID is the versionID argument value.
+			VersionID int64
+		}
+		// SetCurrentWorkflow holds details about calls to the SetCurrentWorkflow method.
+		SetCurrentWorkflow []struct {
+			// Ctx is the ctx argument value.
+			Ctx context.Context
+			// Name is the name argument value.
+			Name string
+			// VersionID is the versionID argument value.
+			VersionID int64
 		}
 		// SetNext holds details about calls to the SetNext method.
 		SetNext []struct {
@@ -1545,6 +1870,13 @@ type MockTx struct {
 			// Run is the run argument value.
 			Run StepRun
 		}
+		// TouchStepHeartbeat holds details about calls to the TouchStepHeartbeat method.
+		TouchStepHeartbeat []struct {
+			// Ctx is the ctx argument value.
+			Ctx context.Context
+			// StepRunID is the stepRunID argument value.
+			StepRunID string
+		}
 		// UpsertWorkflowVersion holds details about calls to the UpsertWorkflowVersion method.
 		UpsertWorkflowVersion []struct {
 			// Ctx is the ctx argument value.
@@ -1556,6 +1888,7 @@ type MockTx struct {
 	lockActiveStepRun          sync.RWMutex
 	lockAddStepUsage           sync.RWMutex
 	lockCreateProcess          sync.RWMutex
+	lockDeleteWorkflow         sync.RWMutex
 	lockFinishProcess          sync.RWMutex
 	lockFinishStepRun          sync.RWMutex
 	lockGetProcess             sync.RWMutex
@@ -1563,18 +1896,22 @@ type MockTx struct {
 	lockGetWorkflowVersion     sync.RWMutex
 	lockLatestWorkflowVersions sync.RWMutex
 	lockListProcesses          sync.RWMutex
+	lockListStaleJobs          sync.RWMutex
 	lockListStepRuns           sync.RWMutex
 	lockListWaiting            sync.RWMutex
 	lockListWorkflowVersions   sync.RWMutex
 	lockLockProcess            sync.RWMutex
 	lockMergeVars              sync.RWMutex
 	lockSQL                    sync.RWMutex
+	lockSeedWorkflow           sync.RWMutex
+	lockSetCurrentWorkflow     sync.RWMutex
 	lockSetNext                sync.RWMutex
 	lockSetStepIteration       sync.RWMutex
 	lockSetStepPhase           sync.RWMutex
 	lockSetStepSession         sync.RWMutex
 	lockSetWaiting             sync.RWMutex
 	lockStartStepRun           sync.RWMutex
+	lockTouchStepHeartbeat     sync.RWMutex
 	lockUpsertWorkflowVersion  sync.RWMutex
 }
 
@@ -1687,6 +2024,42 @@ func (mock *MockTx) CreateProcessCalls() []struct {
 	mock.lockCreateProcess.RLock()
 	calls = mock.calls.CreateProcess
 	mock.lockCreateProcess.RUnlock()
+	return calls
+}
+
+// DeleteWorkflow calls DeleteWorkflowFunc.
+func (mock *MockTx) DeleteWorkflow(ctx context.Context, name string) (bool, error) {
+	if mock.DeleteWorkflowFunc == nil {
+		panic("MockTx.DeleteWorkflowFunc: method is nil but Tx.DeleteWorkflow was just called")
+	}
+	callInfo := struct {
+		Ctx  context.Context
+		Name string
+	}{
+		Ctx:  ctx,
+		Name: name,
+	}
+	mock.lockDeleteWorkflow.Lock()
+	mock.calls.DeleteWorkflow = append(mock.calls.DeleteWorkflow, callInfo)
+	mock.lockDeleteWorkflow.Unlock()
+	return mock.DeleteWorkflowFunc(ctx, name)
+}
+
+// DeleteWorkflowCalls gets all the calls that were made to DeleteWorkflow.
+// Check the length with:
+//
+//	len(mockedTx.DeleteWorkflowCalls())
+func (mock *MockTx) DeleteWorkflowCalls() []struct {
+	Ctx  context.Context
+	Name string
+} {
+	var calls []struct {
+		Ctx  context.Context
+		Name string
+	}
+	mock.lockDeleteWorkflow.RLock()
+	calls = mock.calls.DeleteWorkflow
+	mock.lockDeleteWorkflow.RUnlock()
 	return calls
 }
 
@@ -1942,6 +2315,42 @@ func (mock *MockTx) ListProcessesCalls() []struct {
 	return calls
 }
 
+// ListStaleJobs calls ListStaleJobsFunc.
+func (mock *MockTx) ListStaleJobs(ctx context.Context, now time.Time) ([]StaleJob, error) {
+	if mock.ListStaleJobsFunc == nil {
+		panic("MockTx.ListStaleJobsFunc: method is nil but Tx.ListStaleJobs was just called")
+	}
+	callInfo := struct {
+		Ctx context.Context
+		Now time.Time
+	}{
+		Ctx: ctx,
+		Now: now,
+	}
+	mock.lockListStaleJobs.Lock()
+	mock.calls.ListStaleJobs = append(mock.calls.ListStaleJobs, callInfo)
+	mock.lockListStaleJobs.Unlock()
+	return mock.ListStaleJobsFunc(ctx, now)
+}
+
+// ListStaleJobsCalls gets all the calls that were made to ListStaleJobs.
+// Check the length with:
+//
+//	len(mockedTx.ListStaleJobsCalls())
+func (mock *MockTx) ListStaleJobsCalls() []struct {
+	Ctx context.Context
+	Now time.Time
+} {
+	var calls []struct {
+		Ctx context.Context
+		Now time.Time
+	}
+	mock.lockListStaleJobs.RLock()
+	calls = mock.calls.ListStaleJobs
+	mock.lockListStaleJobs.RUnlock()
+	return calls
+}
+
 // ListStepRuns calls ListStepRunsFunc.
 func (mock *MockTx) ListStepRuns(ctx context.Context, processID string) ([]StepRun, error) {
 	if mock.ListStepRunsFunc == nil {
@@ -2150,6 +2559,86 @@ func (mock *MockTx) SQLCalls() []struct {
 	mock.lockSQL.RLock()
 	calls = mock.calls.SQL
 	mock.lockSQL.RUnlock()
+	return calls
+}
+
+// SeedWorkflow calls SeedWorkflowFunc.
+func (mock *MockTx) SeedWorkflow(ctx context.Context, name string, versionID int64) (bool, error) {
+	if mock.SeedWorkflowFunc == nil {
+		panic("MockTx.SeedWorkflowFunc: method is nil but Tx.SeedWorkflow was just called")
+	}
+	callInfo := struct {
+		Ctx       context.Context
+		Name      string
+		VersionID int64
+	}{
+		Ctx:       ctx,
+		Name:      name,
+		VersionID: versionID,
+	}
+	mock.lockSeedWorkflow.Lock()
+	mock.calls.SeedWorkflow = append(mock.calls.SeedWorkflow, callInfo)
+	mock.lockSeedWorkflow.Unlock()
+	return mock.SeedWorkflowFunc(ctx, name, versionID)
+}
+
+// SeedWorkflowCalls gets all the calls that were made to SeedWorkflow.
+// Check the length with:
+//
+//	len(mockedTx.SeedWorkflowCalls())
+func (mock *MockTx) SeedWorkflowCalls() []struct {
+	Ctx       context.Context
+	Name      string
+	VersionID int64
+} {
+	var calls []struct {
+		Ctx       context.Context
+		Name      string
+		VersionID int64
+	}
+	mock.lockSeedWorkflow.RLock()
+	calls = mock.calls.SeedWorkflow
+	mock.lockSeedWorkflow.RUnlock()
+	return calls
+}
+
+// SetCurrentWorkflow calls SetCurrentWorkflowFunc.
+func (mock *MockTx) SetCurrentWorkflow(ctx context.Context, name string, versionID int64) error {
+	if mock.SetCurrentWorkflowFunc == nil {
+		panic("MockTx.SetCurrentWorkflowFunc: method is nil but Tx.SetCurrentWorkflow was just called")
+	}
+	callInfo := struct {
+		Ctx       context.Context
+		Name      string
+		VersionID int64
+	}{
+		Ctx:       ctx,
+		Name:      name,
+		VersionID: versionID,
+	}
+	mock.lockSetCurrentWorkflow.Lock()
+	mock.calls.SetCurrentWorkflow = append(mock.calls.SetCurrentWorkflow, callInfo)
+	mock.lockSetCurrentWorkflow.Unlock()
+	return mock.SetCurrentWorkflowFunc(ctx, name, versionID)
+}
+
+// SetCurrentWorkflowCalls gets all the calls that were made to SetCurrentWorkflow.
+// Check the length with:
+//
+//	len(mockedTx.SetCurrentWorkflowCalls())
+func (mock *MockTx) SetCurrentWorkflowCalls() []struct {
+	Ctx       context.Context
+	Name      string
+	VersionID int64
+} {
+	var calls []struct {
+		Ctx       context.Context
+		Name      string
+		VersionID int64
+	}
+	mock.lockSetCurrentWorkflow.RLock()
+	calls = mock.calls.SetCurrentWorkflow
+	mock.lockSetCurrentWorkflow.RUnlock()
 	return calls
 }
 
@@ -2389,6 +2878,42 @@ func (mock *MockTx) StartStepRunCalls() []struct {
 	return calls
 }
 
+// TouchStepHeartbeat calls TouchStepHeartbeatFunc.
+func (mock *MockTx) TouchStepHeartbeat(ctx context.Context, stepRunID string) (bool, error) {
+	if mock.TouchStepHeartbeatFunc == nil {
+		panic("MockTx.TouchStepHeartbeatFunc: method is nil but Tx.TouchStepHeartbeat was just called")
+	}
+	callInfo := struct {
+		Ctx       context.Context
+		StepRunID string
+	}{
+		Ctx:       ctx,
+		StepRunID: stepRunID,
+	}
+	mock.lockTouchStepHeartbeat.Lock()
+	mock.calls.TouchStepHeartbeat = append(mock.calls.TouchStepHeartbeat, callInfo)
+	mock.lockTouchStepHeartbeat.Unlock()
+	return mock.TouchStepHeartbeatFunc(ctx, stepRunID)
+}
+
+// TouchStepHeartbeatCalls gets all the calls that were made to TouchStepHeartbeat.
+// Check the length with:
+//
+//	len(mockedTx.TouchStepHeartbeatCalls())
+func (mock *MockTx) TouchStepHeartbeatCalls() []struct {
+	Ctx       context.Context
+	StepRunID string
+} {
+	var calls []struct {
+		Ctx       context.Context
+		StepRunID string
+	}
+	mock.lockTouchStepHeartbeat.RLock()
+	calls = mock.calls.TouchStepHeartbeat
+	mock.lockTouchStepHeartbeat.RUnlock()
+	return calls
+}
+
 // UpsertWorkflowVersion calls UpsertWorkflowVersionFunc.
 func (mock *MockTx) UpsertWorkflowVersion(ctx context.Context, v WorkflowVersion) (WorkflowVersion, error) {
 	if mock.UpsertWorkflowVersionFunc == nil {
@@ -2444,6 +2969,9 @@ var _ Querier = &MockQuerier{}
 //			CreateProcessFunc: func(ctx context.Context, p Process) (bool, error) {
 //				panic("mock out the CreateProcess method")
 //			},
+//			DeleteWorkflowFunc: func(ctx context.Context, name string) (bool, error) {
+//				panic("mock out the DeleteWorkflow method")
+//			},
 //			FinishProcessFunc: func(ctx context.Context, processID string, finish Finish) (bool, error) {
 //				panic("mock out the FinishProcess method")
 //			},
@@ -2465,6 +2993,9 @@ var _ Querier = &MockQuerier{}
 //			ListProcessesFunc: func(ctx context.Context, filter ListFilter) (Page, error) {
 //				panic("mock out the ListProcesses method")
 //			},
+//			ListStaleJobsFunc: func(ctx context.Context, now time.Time) ([]StaleJob, error) {
+//				panic("mock out the ListStaleJobs method")
+//			},
 //			ListStepRunsFunc: func(ctx context.Context, processID string) ([]StepRun, error) {
 //				panic("mock out the ListStepRuns method")
 //			},
@@ -2479,6 +3010,12 @@ var _ Querier = &MockQuerier{}
 //			},
 //			MergeVarsFunc: func(ctx context.Context, processID string, vars Vars) error {
 //				panic("mock out the MergeVars method")
+//			},
+//			SeedWorkflowFunc: func(ctx context.Context, name string, versionID int64) (bool, error) {
+//				panic("mock out the SeedWorkflow method")
+//			},
+//			SetCurrentWorkflowFunc: func(ctx context.Context, name string, versionID int64) error {
+//				panic("mock out the SetCurrentWorkflow method")
 //			},
 //			SetNextFunc: func(ctx context.Context, processID string, next Next) (bool, error) {
 //				panic("mock out the SetNext method")
@@ -2498,6 +3035,9 @@ var _ Querier = &MockQuerier{}
 //			StartStepRunFunc: func(ctx context.Context, run StepRun) error {
 //				panic("mock out the StartStepRun method")
 //			},
+//			TouchStepHeartbeatFunc: func(ctx context.Context, stepRunID string) (bool, error) {
+//				panic("mock out the TouchStepHeartbeat method")
+//			},
 //			UpsertWorkflowVersionFunc: func(ctx context.Context, v WorkflowVersion) (WorkflowVersion, error) {
 //				panic("mock out the UpsertWorkflowVersion method")
 //			},
@@ -2516,6 +3056,9 @@ type MockQuerier struct {
 
 	// CreateProcessFunc mocks the CreateProcess method.
 	CreateProcessFunc func(ctx context.Context, p Process) (bool, error)
+
+	// DeleteWorkflowFunc mocks the DeleteWorkflow method.
+	DeleteWorkflowFunc func(ctx context.Context, name string) (bool, error)
 
 	// FinishProcessFunc mocks the FinishProcess method.
 	FinishProcessFunc func(ctx context.Context, processID string, finish Finish) (bool, error)
@@ -2538,6 +3081,9 @@ type MockQuerier struct {
 	// ListProcessesFunc mocks the ListProcesses method.
 	ListProcessesFunc func(ctx context.Context, filter ListFilter) (Page, error)
 
+	// ListStaleJobsFunc mocks the ListStaleJobs method.
+	ListStaleJobsFunc func(ctx context.Context, now time.Time) ([]StaleJob, error)
+
 	// ListStepRunsFunc mocks the ListStepRuns method.
 	ListStepRunsFunc func(ctx context.Context, processID string) ([]StepRun, error)
 
@@ -2552,6 +3098,12 @@ type MockQuerier struct {
 
 	// MergeVarsFunc mocks the MergeVars method.
 	MergeVarsFunc func(ctx context.Context, processID string, vars Vars) error
+
+	// SeedWorkflowFunc mocks the SeedWorkflow method.
+	SeedWorkflowFunc func(ctx context.Context, name string, versionID int64) (bool, error)
+
+	// SetCurrentWorkflowFunc mocks the SetCurrentWorkflow method.
+	SetCurrentWorkflowFunc func(ctx context.Context, name string, versionID int64) error
 
 	// SetNextFunc mocks the SetNext method.
 	SetNextFunc func(ctx context.Context, processID string, next Next) (bool, error)
@@ -2570,6 +3122,9 @@ type MockQuerier struct {
 
 	// StartStepRunFunc mocks the StartStepRun method.
 	StartStepRunFunc func(ctx context.Context, run StepRun) error
+
+	// TouchStepHeartbeatFunc mocks the TouchStepHeartbeat method.
+	TouchStepHeartbeatFunc func(ctx context.Context, stepRunID string) (bool, error)
 
 	// UpsertWorkflowVersionFunc mocks the UpsertWorkflowVersion method.
 	UpsertWorkflowVersionFunc func(ctx context.Context, v WorkflowVersion) (WorkflowVersion, error)
@@ -2598,6 +3153,13 @@ type MockQuerier struct {
 			Ctx context.Context
 			// P is the p argument value.
 			P Process
+		}
+		// DeleteWorkflow holds details about calls to the DeleteWorkflow method.
+		DeleteWorkflow []struct {
+			// Ctx is the ctx argument value.
+			Ctx context.Context
+			// Name is the name argument value.
+			Name string
 		}
 		// FinishProcess holds details about calls to the FinishProcess method.
 		FinishProcess []struct {
@@ -2648,6 +3210,13 @@ type MockQuerier struct {
 			// Filter is the filter argument value.
 			Filter ListFilter
 		}
+		// ListStaleJobs holds details about calls to the ListStaleJobs method.
+		ListStaleJobs []struct {
+			// Ctx is the ctx argument value.
+			Ctx context.Context
+			// Now is the now argument value.
+			Now time.Time
+		}
 		// ListStepRuns holds details about calls to the ListStepRuns method.
 		ListStepRuns []struct {
 			// Ctx is the ctx argument value.
@@ -2684,6 +3253,24 @@ type MockQuerier struct {
 			ProcessID string
 			// Vars is the vars argument value.
 			Vars Vars
+		}
+		// SeedWorkflow holds details about calls to the SeedWorkflow method.
+		SeedWorkflow []struct {
+			// Ctx is the ctx argument value.
+			Ctx context.Context
+			// Name is the name argument value.
+			Name string
+			// VersionID is the versionID argument value.
+			VersionID int64
+		}
+		// SetCurrentWorkflow holds details about calls to the SetCurrentWorkflow method.
+		SetCurrentWorkflow []struct {
+			// Ctx is the ctx argument value.
+			Ctx context.Context
+			// Name is the name argument value.
+			Name string
+			// VersionID is the versionID argument value.
+			VersionID int64
 		}
 		// SetNext holds details about calls to the SetNext method.
 		SetNext []struct {
@@ -2737,6 +3324,13 @@ type MockQuerier struct {
 			// Run is the run argument value.
 			Run StepRun
 		}
+		// TouchStepHeartbeat holds details about calls to the TouchStepHeartbeat method.
+		TouchStepHeartbeat []struct {
+			// Ctx is the ctx argument value.
+			Ctx context.Context
+			// StepRunID is the stepRunID argument value.
+			StepRunID string
+		}
 		// UpsertWorkflowVersion holds details about calls to the UpsertWorkflowVersion method.
 		UpsertWorkflowVersion []struct {
 			// Ctx is the ctx argument value.
@@ -2748,6 +3342,7 @@ type MockQuerier struct {
 	lockActiveStepRun          sync.RWMutex
 	lockAddStepUsage           sync.RWMutex
 	lockCreateProcess          sync.RWMutex
+	lockDeleteWorkflow         sync.RWMutex
 	lockFinishProcess          sync.RWMutex
 	lockFinishStepRun          sync.RWMutex
 	lockGetProcess             sync.RWMutex
@@ -2755,17 +3350,21 @@ type MockQuerier struct {
 	lockGetWorkflowVersion     sync.RWMutex
 	lockLatestWorkflowVersions sync.RWMutex
 	lockListProcesses          sync.RWMutex
+	lockListStaleJobs          sync.RWMutex
 	lockListStepRuns           sync.RWMutex
 	lockListWaiting            sync.RWMutex
 	lockListWorkflowVersions   sync.RWMutex
 	lockLockProcess            sync.RWMutex
 	lockMergeVars              sync.RWMutex
+	lockSeedWorkflow           sync.RWMutex
+	lockSetCurrentWorkflow     sync.RWMutex
 	lockSetNext                sync.RWMutex
 	lockSetStepIteration       sync.RWMutex
 	lockSetStepPhase           sync.RWMutex
 	lockSetStepSession         sync.RWMutex
 	lockSetWaiting             sync.RWMutex
 	lockStartStepRun           sync.RWMutex
+	lockTouchStepHeartbeat     sync.RWMutex
 	lockUpsertWorkflowVersion  sync.RWMutex
 }
 
@@ -2878,6 +3477,42 @@ func (mock *MockQuerier) CreateProcessCalls() []struct {
 	mock.lockCreateProcess.RLock()
 	calls = mock.calls.CreateProcess
 	mock.lockCreateProcess.RUnlock()
+	return calls
+}
+
+// DeleteWorkflow calls DeleteWorkflowFunc.
+func (mock *MockQuerier) DeleteWorkflow(ctx context.Context, name string) (bool, error) {
+	if mock.DeleteWorkflowFunc == nil {
+		panic("MockQuerier.DeleteWorkflowFunc: method is nil but Querier.DeleteWorkflow was just called")
+	}
+	callInfo := struct {
+		Ctx  context.Context
+		Name string
+	}{
+		Ctx:  ctx,
+		Name: name,
+	}
+	mock.lockDeleteWorkflow.Lock()
+	mock.calls.DeleteWorkflow = append(mock.calls.DeleteWorkflow, callInfo)
+	mock.lockDeleteWorkflow.Unlock()
+	return mock.DeleteWorkflowFunc(ctx, name)
+}
+
+// DeleteWorkflowCalls gets all the calls that were made to DeleteWorkflow.
+// Check the length with:
+//
+//	len(mockedQuerier.DeleteWorkflowCalls())
+func (mock *MockQuerier) DeleteWorkflowCalls() []struct {
+	Ctx  context.Context
+	Name string
+} {
+	var calls []struct {
+		Ctx  context.Context
+		Name string
+	}
+	mock.lockDeleteWorkflow.RLock()
+	calls = mock.calls.DeleteWorkflow
+	mock.lockDeleteWorkflow.RUnlock()
 	return calls
 }
 
@@ -3133,6 +3768,42 @@ func (mock *MockQuerier) ListProcessesCalls() []struct {
 	return calls
 }
 
+// ListStaleJobs calls ListStaleJobsFunc.
+func (mock *MockQuerier) ListStaleJobs(ctx context.Context, now time.Time) ([]StaleJob, error) {
+	if mock.ListStaleJobsFunc == nil {
+		panic("MockQuerier.ListStaleJobsFunc: method is nil but Querier.ListStaleJobs was just called")
+	}
+	callInfo := struct {
+		Ctx context.Context
+		Now time.Time
+	}{
+		Ctx: ctx,
+		Now: now,
+	}
+	mock.lockListStaleJobs.Lock()
+	mock.calls.ListStaleJobs = append(mock.calls.ListStaleJobs, callInfo)
+	mock.lockListStaleJobs.Unlock()
+	return mock.ListStaleJobsFunc(ctx, now)
+}
+
+// ListStaleJobsCalls gets all the calls that were made to ListStaleJobs.
+// Check the length with:
+//
+//	len(mockedQuerier.ListStaleJobsCalls())
+func (mock *MockQuerier) ListStaleJobsCalls() []struct {
+	Ctx context.Context
+	Now time.Time
+} {
+	var calls []struct {
+		Ctx context.Context
+		Now time.Time
+	}
+	mock.lockListStaleJobs.RLock()
+	calls = mock.calls.ListStaleJobs
+	mock.lockListStaleJobs.RUnlock()
+	return calls
+}
+
 // ListStepRuns calls ListStepRunsFunc.
 func (mock *MockQuerier) ListStepRuns(ctx context.Context, processID string) ([]StepRun, error) {
 	if mock.ListStepRunsFunc == nil {
@@ -3314,6 +3985,86 @@ func (mock *MockQuerier) MergeVarsCalls() []struct {
 	mock.lockMergeVars.RLock()
 	calls = mock.calls.MergeVars
 	mock.lockMergeVars.RUnlock()
+	return calls
+}
+
+// SeedWorkflow calls SeedWorkflowFunc.
+func (mock *MockQuerier) SeedWorkflow(ctx context.Context, name string, versionID int64) (bool, error) {
+	if mock.SeedWorkflowFunc == nil {
+		panic("MockQuerier.SeedWorkflowFunc: method is nil but Querier.SeedWorkflow was just called")
+	}
+	callInfo := struct {
+		Ctx       context.Context
+		Name      string
+		VersionID int64
+	}{
+		Ctx:       ctx,
+		Name:      name,
+		VersionID: versionID,
+	}
+	mock.lockSeedWorkflow.Lock()
+	mock.calls.SeedWorkflow = append(mock.calls.SeedWorkflow, callInfo)
+	mock.lockSeedWorkflow.Unlock()
+	return mock.SeedWorkflowFunc(ctx, name, versionID)
+}
+
+// SeedWorkflowCalls gets all the calls that were made to SeedWorkflow.
+// Check the length with:
+//
+//	len(mockedQuerier.SeedWorkflowCalls())
+func (mock *MockQuerier) SeedWorkflowCalls() []struct {
+	Ctx       context.Context
+	Name      string
+	VersionID int64
+} {
+	var calls []struct {
+		Ctx       context.Context
+		Name      string
+		VersionID int64
+	}
+	mock.lockSeedWorkflow.RLock()
+	calls = mock.calls.SeedWorkflow
+	mock.lockSeedWorkflow.RUnlock()
+	return calls
+}
+
+// SetCurrentWorkflow calls SetCurrentWorkflowFunc.
+func (mock *MockQuerier) SetCurrentWorkflow(ctx context.Context, name string, versionID int64) error {
+	if mock.SetCurrentWorkflowFunc == nil {
+		panic("MockQuerier.SetCurrentWorkflowFunc: method is nil but Querier.SetCurrentWorkflow was just called")
+	}
+	callInfo := struct {
+		Ctx       context.Context
+		Name      string
+		VersionID int64
+	}{
+		Ctx:       ctx,
+		Name:      name,
+		VersionID: versionID,
+	}
+	mock.lockSetCurrentWorkflow.Lock()
+	mock.calls.SetCurrentWorkflow = append(mock.calls.SetCurrentWorkflow, callInfo)
+	mock.lockSetCurrentWorkflow.Unlock()
+	return mock.SetCurrentWorkflowFunc(ctx, name, versionID)
+}
+
+// SetCurrentWorkflowCalls gets all the calls that were made to SetCurrentWorkflow.
+// Check the length with:
+//
+//	len(mockedQuerier.SetCurrentWorkflowCalls())
+func (mock *MockQuerier) SetCurrentWorkflowCalls() []struct {
+	Ctx       context.Context
+	Name      string
+	VersionID int64
+} {
+	var calls []struct {
+		Ctx       context.Context
+		Name      string
+		VersionID int64
+	}
+	mock.lockSetCurrentWorkflow.RLock()
+	calls = mock.calls.SetCurrentWorkflow
+	mock.lockSetCurrentWorkflow.RUnlock()
 	return calls
 }
 
@@ -3550,6 +4301,42 @@ func (mock *MockQuerier) StartStepRunCalls() []struct {
 	mock.lockStartStepRun.RLock()
 	calls = mock.calls.StartStepRun
 	mock.lockStartStepRun.RUnlock()
+	return calls
+}
+
+// TouchStepHeartbeat calls TouchStepHeartbeatFunc.
+func (mock *MockQuerier) TouchStepHeartbeat(ctx context.Context, stepRunID string) (bool, error) {
+	if mock.TouchStepHeartbeatFunc == nil {
+		panic("MockQuerier.TouchStepHeartbeatFunc: method is nil but Querier.TouchStepHeartbeat was just called")
+	}
+	callInfo := struct {
+		Ctx       context.Context
+		StepRunID string
+	}{
+		Ctx:       ctx,
+		StepRunID: stepRunID,
+	}
+	mock.lockTouchStepHeartbeat.Lock()
+	mock.calls.TouchStepHeartbeat = append(mock.calls.TouchStepHeartbeat, callInfo)
+	mock.lockTouchStepHeartbeat.Unlock()
+	return mock.TouchStepHeartbeatFunc(ctx, stepRunID)
+}
+
+// TouchStepHeartbeatCalls gets all the calls that were made to TouchStepHeartbeat.
+// Check the length with:
+//
+//	len(mockedQuerier.TouchStepHeartbeatCalls())
+func (mock *MockQuerier) TouchStepHeartbeatCalls() []struct {
+	Ctx       context.Context
+	StepRunID string
+} {
+	var calls []struct {
+		Ctx       context.Context
+		StepRunID string
+	}
+	mock.lockTouchStepHeartbeat.RLock()
+	calls = mock.calls.TouchStepHeartbeat
+	mock.lockTouchStepHeartbeat.RUnlock()
 	return calls
 }
 

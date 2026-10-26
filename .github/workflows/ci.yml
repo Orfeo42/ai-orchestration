@@ -24,6 +24,7 @@ jobs:
           cache-dependency-path: |
             go.sum
             pluginapi/go.sum
+            plugins/echo/go.sum
       - name: gofmt
         run: |
           unformatted="$(gofmt -l .)"
@@ -38,6 +39,13 @@ jobs:
       - name: pluginapi tests
         working-directory: pluginapi
         run: go test -count=1 -race ./...
+      - name: echo plugin vet and tests
+        working-directory: plugins/echo
+        env:
+          GOWORK: "off"
+        run: |
+          go vet ./...
+          go test -count=1 -race ./...
 
   go-integration:
     runs-on: ubuntu-latest
@@ -86,6 +94,8 @@ jobs:
             dockerfile: cmd/migrate/Dockerfile
           - component: webui
             dockerfile: web/Dockerfile
+          - component: plugin-echo
+            dockerfile: plugins/echo/Dockerfile
     steps:
       - uses: actions/checkout@v7
       - uses: docker/setup-buildx-action@v4
