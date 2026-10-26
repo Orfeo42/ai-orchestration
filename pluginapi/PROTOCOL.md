@@ -76,7 +76,7 @@ Request body `JobRequest`: `job_id`, `process_id`, `input` (must validate agains
 
 - `error` set means an infrastructure failure: `upstream` for a dependency fault (Forgejo, Claude, hub, timeouts), `internal` for the plugin's own fault. The core retries the step per its retry policy; after the last attempt the process fails with that `error_kind`.
 - A business result that is not success is an outcome (e.g. `tests_failed`, `not_found`), never an error.
-- Core replies: `204` acknowledged; `410 job_not_active` if the step run is no longer active (cancelled, superseded): the plugin stops retrying and drops the result. On network errors or `5xx` the plugin retries with exponential backoff until `deadline` plus 10 minutes. A fast async job can deliver its result before the core has finished recording the job; the core then answers `503 upstream_failure` and the retry delivers it.
+- Core replies: `204` acknowledged; `410 job_not_active` if the step run is no longer active (cancelled, superseded): the plugin stops retrying and drops the result. On network errors or `5xx` the plugin retries with exponential backoff until `deadline` plus 10 minutes.
 
 ### Progress and heartbeat
 
