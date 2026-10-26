@@ -13,6 +13,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/Orfeo42/ai-orchestration/internal/engine"
 	"github.com/Orfeo42/ai-orchestration/internal/plugins"
 	"github.com/Orfeo42/ai-orchestration/internal/process"
 	"github.com/Orfeo42/ai-orchestration/internal/step"
@@ -436,6 +437,15 @@ func TestJobResult(t *testing.T) {
 		resp := send(t, http.MethodPost, s.url+path, `{}`)
 		require.Equal(t, http.StatusGone, resp.StatusCode)
 		assert.Equal(t, pluginapi.CodeJobNotActive, decodeAPIError(t, resp).Code)
+	})
+
+	t.Run("job pending returns retryable 503", func(t *testing.T) {
+		s := newPluginTestServer(t)
+		s.verifier.VerifyFunc = func(plugins.CallbackKind, string, url.Values, time.Time) error { return nil }
+		s.callbacks.ResultFunc = func(context.Context, string, pluginapi.Result) error { return engine.ErrJobPending }
+		resp := send(t, http.MethodPost, s.url+path, `{}`)
+		require.Equal(t, http.StatusServiceUnavailable, resp.StatusCode)
+		assert.Equal(t, pluginapi.CodeUpstreamFailure, decodeAPIError(t, resp).Code)
 	})
 
 	t.Run("not found returns 410", func(t *testing.T) {

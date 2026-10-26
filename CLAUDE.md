@@ -31,7 +31,7 @@ Use `justfile` — every workflow has a recipe (`just --list`).
 
 Single test: `go test -run TestParseClaudeLine/assistant_tool_use ./internal/events/...`.
 
-CI is `.github/workflows/ci.yml` (GitHub Actions): `go` (gofmt, vet, unit tests, `pluginapi` and `plugins/echo` tests with `-race`), `go-integration` (full `go test`, testcontainers on the runner's Docker), `web` (lint, typecheck, Vitest, build) on every push and PR; on `main` the `publish` job builds `linux/amd64` images `ghcr.io/orfeo42/ai-orchestration-{worker,trigger,migrate,webui,plugin-echo}` tagged `latest` + `sha-<commit>`. New deployable components (plugins) get a matrix entry there. Dependabot (`.github/dependabot.yml`) opens one grouped weekly PR per ecosystem: Go modules (root, `pluginapi`, `plugins/echo`, `.tools/*`), npm (`web`), GitHub Actions, Dockerfile base images, compose images.
+CI is `.github/workflows/ci.yml` (GitHub Actions): `go` (gofmt, vet, unit tests, `pluginapi` and `plugins/echo` tests with `-race`), `go-integration` (full `go test`, testcontainers on the runner's Docker), `web` (lint, typecheck, Vitest, build) on every push to `main` and every PR; on a published GitHub release (tag `vX.Y.Z`) the `publish` job builds `linux/amd64` images `ghcr.io/orfeo42/ai-orchestration-{worker,trigger,migrate,webui,plugin-echo}` tagged `X.Y.Z`, `X.Y` and `latest` (prereleases get only `X.Y.Z`). Merging to `main` publishes nothing. New deployable components (plugins) get a matrix entry there. Dependabot (`.github/dependabot.yml`) opens one grouped weekly PR per ecosystem: Go modules (root, `pluginapi`, `plugins/echo`, `.tools/*`), npm (`web`), GitHub Actions, Dockerfile base images, compose images.
 
 ## Plugins
 

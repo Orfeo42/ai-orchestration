@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Orfeo42/ai-orchestration/internal/engine"
 	"github.com/Orfeo42/ai-orchestration/internal/plugins"
 	"github.com/Orfeo42/ai-orchestration/internal/process"
 	"github.com/Orfeo42/ai-orchestration/internal/step"
@@ -406,6 +407,8 @@ func writeCallbackError(w http.ResponseWriter, r *http.Request, err error) {
 		writeProtocolError(w, r, http.StatusGone, pluginapi.CodeJobNotActive, err)
 	case errors.Is(err, pluginapi.ErrInvalidInput):
 		writeProtocolError(w, r, http.StatusUnprocessableEntity, pluginapi.CodeInvalidInput, err)
+	case errors.Is(err, engine.ErrJobPending):
+		writeProtocolError(w, r, http.StatusServiceUnavailable, pluginapi.CodeUpstreamFailure, err)
 	default:
 		writeProtocolError(w, r, http.StatusInternalServerError, pluginapi.CodeInternal, err)
 	}
@@ -422,7 +425,7 @@ func writeAPIError(w http.ResponseWriter, r *http.Request, status int, err error
 }
 
 func logAPIError(r *http.Request, status int, err error) {
-	if status >= http.StatusInternalServerError {
+	if status >= http.StatusInternalServerError && status != http.StatusServiceUnavailable {
 		slog.ErrorContext(r.Context(), "plugin api failed",
 			slog.String("method", r.Method),
 			slog.String("path", r.URL.Path),

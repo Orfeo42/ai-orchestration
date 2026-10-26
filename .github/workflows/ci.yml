@@ -4,6 +4,8 @@ on:
   push:
     branches: [main]
   pull_request:
+  release:
+    types: [published]
   workflow_dispatch:
 
 permissions:
@@ -77,7 +79,7 @@ jobs:
       - run: npm run build
 
   publish:
-    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    if: github.event_name == 'release'
     needs: [go, go-integration, web]
     runs-on: ubuntu-latest
     permissions:
@@ -108,9 +110,11 @@ jobs:
         uses: docker/metadata-action@v6
         with:
           images: ghcr.io/orfeo42/ai-orchestration-${{ matrix.component }}
+          flavor: |
+            latest=${{ !github.event.release.prerelease }}
           tags: |
-            type=raw,value=latest,enable={{is_default_branch}}
-            type=sha
+            type=semver,pattern={{version}},value=${{ github.event.release.tag_name }}
+            type=semver,pattern={{major}}.{{minor}},value=${{ github.event.release.tag_name }},enable=${{ !github.event.release.prerelease }}
       - uses: docker/build-push-action@v7
         with:
           context: .
