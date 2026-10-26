@@ -4,7 +4,8 @@ info:
   version: "1"
   description: Endpoints every plugin implements (called by the core) and the trigger endpoint the core exposes to plugins. Job callbacks go to the opaque per-job URLs in JobRequest.callback; their bodies are Result and Progress. See PROTOCOL.md.
   license:
-    name: Proprietary
+    name: Apache 2.0
+    identifier: Apache-2.0
 servers:
   - url: "{baseUrl}"
     description: Plugin base URL for plugin operations, core base URL for core operations
