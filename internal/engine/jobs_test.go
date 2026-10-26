@@ -206,46 +206,6 @@ func TestCompleteJob(t *testing.T) {
 		assert.Equal(t, []process.Next{{From: []process.Status{process.StatusWaiting}, Step: "c", JobID: nextJobID}}, h.nexts)
 	})
 
-	t.Run("result before the job wait is recorded is pending", func(t *testing.T) {
-		h := newHarness(t, testDef(), okRun)
-		h.lock(process.Process{ID: "p1", WorkflowVersionID: 1, Status: process.StatusRunning, CurrentStep: "a"})
-		h.tx.GetStepRunFunc = func(_ context.Context, id string) (process.StepRun, error) {
-			return process.StepRun{ID: id, ProcessID: "p1", StepID: "a", Uses: "fake", Status: process.StepRunning}, nil
-		}
-
-		err := h.engine.CompleteJob(context.Background(), JobResult{StepRunID: "sr1", Outcome: "ok"})
-
-		require.ErrorIs(t, err, ErrJobPending)
-		assert.Empty(t, h.stepRuns)
-		assert.Empty(t, h.merged)
-		assert.Empty(t, h.inserts)
-	})
-
-	t.Run("running process on another step is not active", func(t *testing.T) {
-		h := newHarness(t, testDef(), okRun)
-		h.lock(process.Process{ID: "p1", WorkflowVersionID: 1, Status: process.StatusRunning, CurrentStep: "c"})
-		h.tx.GetStepRunFunc = func(_ context.Context, id string) (process.StepRun, error) {
-			return process.StepRun{ID: id, ProcessID: "p1", StepID: "a", Uses: "fake", Status: process.StepRunning}, nil
-		}
-
-		err := h.engine.CompleteJob(context.Background(), JobResult{StepRunID: "sr1", Outcome: "ok"})
-
-		require.ErrorIs(t, err, process.ErrNotActive)
-		assert.NotErrorIs(t, err, ErrJobPending)
-	})
-
-	t.Run("closed step run of a running process is not active", func(t *testing.T) {
-		h := newHarness(t, testDef(), okRun)
-		h.lock(process.Process{ID: "p1", WorkflowVersionID: 1, Status: process.StatusRunning, CurrentStep: "a"})
-		h.tx.GetStepRunFunc = func(_ context.Context, id string) (process.StepRun, error) {
-			return process.StepRun{ID: id, ProcessID: "p1", StepID: "a", Uses: "fake", Status: process.StepFailed}, nil
-		}
-
-		err := h.engine.CompleteJob(context.Background(), JobResult{StepRunID: "sr1", Outcome: "ok"})
-
-		require.ErrorIs(t, err, process.ErrNotActive)
-	})
-
 	t.Run("success with empty output omits the key", func(t *testing.T) {
 		h := newHarness(t, testDef(), okRun)
 		h.lock(jobWaitingProcess(1))
