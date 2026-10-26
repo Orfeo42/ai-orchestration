@@ -28,6 +28,7 @@ func (e engineError) Error() string { return string(e) }
 const (
 	ErrStepRunClosed  engineError = "step run already closed"
 	ErrMissingJobWait engineError = "job wait without job details"
+	ErrJobPending     engineError = "job result arrived before the job wait was recorded"
 )
 
 type StepArgs struct {
@@ -342,6 +343,9 @@ func (e *Engine) CompleteJob(ctx context.Context, res JobResult) error {
 			return fmt.Errorf("lock process: %w", err)
 		}
 		w := p.WaitingFor
+		if p.Status == process.StatusRunning && w == nil && run.Status == process.StepRunning && p.CurrentStep == run.StepID {
+			return fmt.Errorf("%w: job %s", ErrJobPending, res.StepRunID)
+		}
 		if p.Status != process.StatusWaiting || w == nil || w.Kind != process.WaitJob || w.Job == nil || w.Job.StepRunID != res.StepRunID {
 			return fmt.Errorf("%w: not waiting for job %s", process.ErrNotActive, res.StepRunID)
 		}
