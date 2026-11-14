@@ -1,4 +1,4 @@
-FROM golang:1.27.3-alpine AS builder
+FROM golang:1.27.4-alpine AS builder
 WORKDIR /build
 COPY pluginapi/go.mod pluginapi/go.sum ./pluginapi/
 COPY plugins/echo/go.mod plugins/echo/go.sum ./plugins/echo/
@@ -11,7 +11,7 @@ COPY plugins/echo ./plugins/echo
 WORKDIR /build/plugins/echo
 RUN CGO_ENABLED=0 go build -o /echo .
 
-FROM alpine:3.24.2
+FROM alpine:3.24.4
 RUN apk add --no-cache ca-certificates
 COPY --from=builder /echo /usr/local/bin/echo-plugin
 EXPOSE 8090
